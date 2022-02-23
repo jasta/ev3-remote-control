@@ -15,6 +15,7 @@ use serde_json::json;
 use tokio::runtime::Runtime;
 
 use time_resource::TimeResource;
+use crate::block_handler::{BlockHandler, BlockHandlerConfig};
 
 use crate::coap_resource_server::{CoapResource, CoapResourceServer, CoapResourceServerBuilder, HandlingError};
 use crate::device_resource::DevicesResource;

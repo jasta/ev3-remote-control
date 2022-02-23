@@ -143,7 +143,7 @@ impl CoapResourceServer {
   }
 
   pub fn handle(&self, request: CoapRequest<SocketAddr>) -> Option<CoapResponse> {
-    let path = coap_utils::request_get_path_as_vec(&request).unwrap_or(vec![]);
+    let path = coap_utils::request_get_path_as_vec(&request).unwrap_or_default();
     let matched_handler_result = self.find_most_specific_handler(&path);
     if log::log_enabled!(Info) {
       info!(
@@ -160,7 +160,7 @@ impl CoapResourceServer {
     }
   }
 
-  fn find_most_specific_handler(&self, path: &Vec<String>) -> Option<(usize, &Arc<CoapResourceType>)> {
+  fn find_most_specific_handler(&self, path: &[String]) -> Option<(usize, &Arc<CoapResourceType>)> {
     for search_depth in (0 .. path.len() + 1).rev() {
       let search_path = &path[0..search_depth];
       if let Some(handler) = self.full_path_mapping.get(search_path) {
@@ -181,7 +181,7 @@ impl CoapResourceServer {
         info!("Error generated within {}: {:?}", resource.debug_name(), e);
         match request.response {
           Some(mut reply) => {
-            let ref mut message = reply.message;
+            let message = &mut reply.message;
             message.header.code = MessageClass::Response(
                 e.code.unwrap_or(ResponseType::InternalServerError));
             message.set_content_format(ContentFormat::TextPlain);
