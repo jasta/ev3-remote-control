@@ -88,7 +88,7 @@ impl HalDevice for HalDeviceEv3 {
     let common_attrs = result.extend([
       HalAttribute::new_readonly(HalAttributeType::String, "address"),
       HalAttribute::new_writeonly(HalAttributeType::String, "command"),
-      HalAttribute::new_readonly(HalAttributeType::String, "commands"),
+      HalAttribute::new_readonly_array(HalAttributeType::String, "commands"),
       HalAttribute::new_readonly(HalAttributeType::String, "driver_name"),
       HalAttribute::new_readonly(HalAttributeType::String, "fw_version"),
     ]);
