@@ -7,9 +7,8 @@ use std::net::SocketAddr;
 use std::string::FromUtf8Error;
 use std::sync::{Arc, Mutex};
 
-use coap_lite::{CoapOption, CoapRequest, CoapResponse, ContentFormat, link_format, MessageClass, ResponseType};
-use coap_lite::link_format::LinkFormatWrite;
-use link_format::*;
+use coap_lite::link_format::*;
+use coap_lite::{CoapRequest, CoapResponse, ContentFormat, MessageClass, ResponseType};
 use log::info;
 use log::Level::*;
 use crate::block_handler::{BlockHandler, BlockHandlerConfig};
