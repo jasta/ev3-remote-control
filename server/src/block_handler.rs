@@ -1,4 +1,6 @@
-//! Generic implementation of RFC 7959.
+//! General purpose implementation of block transfer support (RFC 7959).
+//!
+//! Supports both Block1 and Block2.
 
 use std::cmp::min;
 use std::ops::Deref;
