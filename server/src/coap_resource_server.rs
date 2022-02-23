@@ -1,15 +1,18 @@
-use std::borrow::Borrow;
+use std::borrow::{Borrow, BorrowMut};
 use std::collections::HashMap;
+use std::error;
+use std::fmt::{Display, Formatter};
 use std::hash::Hasher;
 use std::net::SocketAddr;
 use std::string::FromUtf8Error;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use coap_lite::{CoapOption, CoapRequest, CoapResponse, ContentFormat, link_format, MessageClass, ResponseType};
 use coap_lite::link_format::LinkFormatWrite;
 use link_format::*;
 use log::info;
 use log::Level::*;
+use crate::block_handler::{BlockHandler, BlockHandlerConfig};
 
 use crate::coap_utils;
 
@@ -31,7 +34,7 @@ pub trait CoapResource {
   /// incoming path was `/foo/bar/baz`, then dangling_path would contain `["bar", "baz"]`.  This can
   /// be very useful when implementing REST applications.  The vec is empty is the path was matched
   /// exactly.
-  fn handle(&self, request: &mut CoapRequest<SocketAddr>, remaining_path: Vec<String>) -> Result<(), HandlingError>;
+  fn handle(&self, request: &mut CoapRequest<SocketAddr>, remaining_path: &[String]) -> Result<(), HandlingError>;
 }
 
 #[derive(Debug, Clone)]
@@ -129,11 +132,13 @@ impl CoapResourceServerBuilder {
       full_path_mapping.insert(core_node.full_path, Arc::from(core_node.resource));
     }
 
-    CoapResourceServer { full_path_mapping }
+    let block_handler = Mutex::new(BlockHandler::new(BlockHandlerConfig::default()));
+    CoapResourceServer { block_handler, full_path_mapping }
   }
 }
 
 pub struct CoapResourceServer {
+  block_handler: Mutex<BlockHandler<SocketAddr>>,
   full_path_mapping: HashMap<Vec<String>, Arc<CoapResourceType>>,
 }
 
@@ -142,7 +147,7 @@ impl CoapResourceServer {
     CoapResourceServerBuilder::new()
   }
 
-  pub fn handle(&self, request: CoapRequest<SocketAddr>) -> Option<CoapResponse> {
+  pub fn handle(&self, mut request: CoapRequest<SocketAddr>) -> Option<CoapResponse> {
     let path = coap_utils::request_get_path_as_vec(&request).unwrap_or_default();
     let matched_handler_result = self.find_most_specific_handler(&path);
     if log::log_enabled!(Info) {
@@ -150,58 +155,56 @@ impl CoapResourceServer {
         "Got {:?} {}, matched handler {}",
         request.get_method(),
         request.get_path(),
-        matched_handler_result.map_or("<internal>", |(_, r)| r.debug_name()));
+        matched_handler_result.as_ref().map_or("<internal>", |(_, r)| r.debug_name()));
     }
-    match matched_handler_result {
+    let final_result = match matched_handler_result {
       Some((matched_path_depth, resource)) => {
-        Self::dispatch_handling(resource, request, (&path[matched_path_depth..]).to_vec())
+        self.maybe_dispatch_to_handler(resource, &mut request, &path[matched_path_depth..])
       },
-      None => Self::prepare_response_without_handling(request),
+      None => Err(HandlingError::not_found()),
+    };
+
+    if let Err(err) = final_result {
+      Self::apply_response_from_error(&mut request, err)
     }
+
+    request.response
   }
 
-  fn find_most_specific_handler(&self, path: &[String]) -> Option<(usize, &Arc<CoapResourceType>)> {
+  fn find_most_specific_handler(&self, path: &[String]) -> Option<(usize, Arc<CoapResourceType>)> {
     for search_depth in (0 .. path.len() + 1).rev() {
       let search_path = &path[0..search_depth];
       if let Some(handler) = self.full_path_mapping.get(search_path) {
-        return Some((search_depth, handler));
+        return Some((search_depth, handler.clone()));
       }
     }
     None
   }
 
-  fn dispatch_handling(
-    resource: &Arc<CoapResourceType>,
-    mut request: CoapRequest<SocketAddr>,
-    remaining_path: Vec<String>
-  ) -> Option<CoapResponse> {
-    match resource.handle(&mut request, remaining_path) {
-      Ok(_) => request.response,
-      Err(e) => {
-        info!("Error generated within {}: {:?}", resource.debug_name(), e);
-        match request.response {
-          Some(mut reply) => {
-            let message = &mut reply.message;
-            message.header.code = MessageClass::Response(
-                e.code.unwrap_or(ResponseType::InternalServerError));
-            message.set_content_format(ContentFormat::TextPlain);
-            message.payload = e.message.into_bytes();
-            Some(reply)
-          },
-          None => None,
-        }
-      }
+  fn maybe_dispatch_to_handler(
+    &self,
+    resource: Arc<CoapResourceType>,
+    request: &mut CoapRequest<SocketAddr>,
+    remaining_path: &[String],
+  ) -> Result<(), HandlingError> {
+    if !self.block_handler.lock().unwrap().intercept_request(request)? {
+      resource.handle(request, remaining_path)?;
+      self.block_handler.lock().unwrap().intercept_response(request)?;
     }
+
+    Ok(())
   }
 
-  fn prepare_response_without_handling(request: CoapRequest<SocketAddr>) -> Option<CoapResponse> {
-    match request.response {
-      Some(mut reply) => {
-        reply.message.header.code = MessageClass::Response(ResponseType::NotFound);
-        reply.message.payload = b"No handler found".to_vec();
-        Some(reply)
-      },
-      _ => None
+  fn apply_response_from_error(
+      request: &mut CoapRequest<SocketAddr>,
+      error: HandlingError
+  ) {
+    if let Some(reply) = &mut request.response {
+      let message = &mut reply.message;
+      message.header.code = MessageClass::Response(
+        error.code.unwrap_or(ResponseType::InternalServerError));
+      message.set_content_format(ContentFormat::TextPlain);
+      message.payload = error.message.into_bytes();
     }
   }
 }
@@ -227,7 +230,7 @@ impl CoapResource for CoreCoapResource {
     writer
   }
 
-  fn handle(&self, request: &mut CoapRequest<SocketAddr>, _: Vec<String>) -> Result<(), HandlingError> {
+  fn handle(&self, request: &mut CoapRequest<SocketAddr>, _remaining_path: &[String]) -> Result<(), HandlingError> {
     let mut reply = request.response.as_mut().ok_or(HandlingError::not_handled())?;
     let mut buffer = String::new();
     let mut write = LinkFormatWrite::new(&mut buffer);
@@ -259,7 +262,7 @@ mod tests {
 
   #[test]
   fn simple_echo_request() {
-    let handler = CoapResourceServerBuilder::new()
+    let mut handler = CoapResourceServerBuilder::new()
         .add_resource(Box::new(TestEchoResource {}))
         .build();
 
@@ -282,7 +285,7 @@ mod tests {
 
   #[test]
   fn core_discovery() {
-    let handler = CoapResourceServerBuilder::new()
+    let mut handler = CoapResourceServerBuilder::new()
         .set_core_discovery(true)
         .add_resource(Box::new(TestEchoResource {}))
         .build();
@@ -325,7 +328,7 @@ mod tests {
     fn handle(
         &self,
         request: &mut CoapRequest<SocketAddr>,
-        _remaining_path: Vec<String>
+        _remaining_path: &[String]
     ) -> Result<(), HandlingError> {
       let mut reply = request.response.as_mut().ok_or(HandlingError::not_handled())?;
       reply.message.payload = request.message.payload.clone();

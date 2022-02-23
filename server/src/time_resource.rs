@@ -33,7 +33,7 @@ impl CoapResource for TimeResource {
   fn handle(
       &self,
       request: &mut CoapRequest<SocketAddr>,
-      _: Vec<String>
+      _remaining_path: &[String],
   ) -> Result<(), HandlingError> {
     if *request.get_method() != RequestType::Get {
       return Err(HandlingError::bad_request("Unsupported method"));

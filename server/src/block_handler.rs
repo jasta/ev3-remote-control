@@ -94,11 +94,7 @@ impl<Endpoint: Ord + Clone> BlockHandler<Endpoint> {
   ) -> Result<(), HandlingError> {
     let response = request.response.as_mut().ok_or_else(HandlingError::not_handled)?;
 
-    // TODO: This is really inefficient since we're cloning the entire payload each time then
-    // clearing it and putting just a slice in.  It's difficult to do differently though since
-    // if we just copy each field manually we might miss one and end up with a broken cached
-    // response when coap-lite changes underneath us.
-    response.message.clone_from(cached_response);
+    Self::packet_clone_limited(&mut response.message, cached_response);
 
     let cached_payload = &cached_response.payload;
 
@@ -125,6 +121,17 @@ impl<Endpoint: Ord + Clone> BlockHandler<Endpoint> {
       [response_block2].into());
 
     Ok(())
+  }
+
+  /// Equivalent to `dst.clone_from(src)` with the exception of not copying message_id or
+  /// payload.
+  fn packet_clone_limited(dst: &mut Packet, src: &Packet) {
+    dst.header.set_version(src.header.get_version());
+    dst.header.set_type(src.header.get_type());
+    dst.header.code = src.header.code;
+    for (&option, value) in src.options() {
+      dst.set_option(CoapOption::from(option), value.clone());
+    }
   }
 
   /// Intercept a request after it has been handled but before it is to be delivered over the
@@ -234,7 +241,7 @@ mod tests {
   }
 
   #[test]
-  fn test_cached_response() {
+  fn test_cached_response_with_blocks() {
     let block = "0123456789\n";
 
     let mut harness = TestServerHarness::new(32);
@@ -242,7 +249,7 @@ mod tests {
     let expected_payload = block.repeat(8).into_bytes();
     let delivered_payload = expected_payload.clone();
 
-    let mut sent_req = create_get_request("test", None);
+    let mut sent_req = create_get_request("test", 1, None);
     let mut received_response = harness.exchange_messages(&mut sent_req, move |received_request| {
       let mut sent_response = received_request.response.as_mut().unwrap();
       sent_response.message.header.code = MessageClass::Response(ResponseType::Content);
@@ -268,9 +275,17 @@ mod tests {
           usize::from(block_num + 1),
           false /* more */,
           block_size).unwrap();
-      let mut next_sent_req = create_get_request("test", Some(sent_block));
+      let mut next_sent_req = create_get_request(
+          "test",
+          received_response.message.header.message_id + 1,
+          Some(sent_block));
 
       received_response = harness.exchange_messages_using_cache(&mut next_sent_req).unwrap();
+
+      // Make sure the caching didn't do something clowny like copy the message_id.
+      assert_eq!(
+          received_response.message.header.message_id,
+          next_sent_req.message.header.message_id);
     };
 
     // Make sure that we _actually_ did block encoding :)
@@ -349,7 +364,7 @@ mod tests {
     DoNotInvoke,
   }
 
-  fn create_get_request(path: &str, block2: Option<BlockValue>) -> CoapRequest<TestEndpoint> {
+  fn create_get_request(path: &str, mid: u16, block2: Option<BlockValue>) -> CoapRequest<TestEndpoint> {
     let mut packet = Packet::new();
     packet.header.code = MessageClass::Request(RequestType::Get);
 
@@ -362,6 +377,7 @@ mod tests {
       packet.add_option_as(CoapOption::Block2, block2);
     }
 
+    packet.header.message_id = mid;
     packet.payload = Vec::new();
     CoapRequest::<TestEndpoint>::from_packet(packet, TestEndpoint::TestClient)
   }

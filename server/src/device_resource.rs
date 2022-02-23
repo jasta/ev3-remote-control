@@ -141,7 +141,7 @@ impl CoapResource for DevicesResource {
         .attr_u32(LINK_ATTR_CONTENT_FORMAT, usize::from(ContentFormat::ApplicationJSON) as u32)
   }
 
-  fn handle(&self, request: &mut CoapRequest<SocketAddr>, remaining_path: Vec<String>) -> Result<(), HandlingError> {
+  fn handle(&self, request: &mut CoapRequest<SocketAddr>, remaining_path: &[String]) -> Result<(), HandlingError> {
     let mut reply = request.response.as_mut().ok_or(HandlingError::not_handled())?;
 
     let hal = &hal::HAL;
