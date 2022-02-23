@@ -147,7 +147,7 @@ impl<Endpoint: Ord + Clone> BlockHandler<Endpoint> {
     if let Some(ref mut response) = request.response {
       // Don't do anything if the caller appears to be trying to implement this manually.
       if response.message.get_option(CoapOption::Block2).is_none() {
-        let required_size = response.message.compute_message_size();
+        let required_size = Self::compute_packet_size_hack(&mut response.message);
         if let Some(request_block2) = Self::maybe_synthesize_block2_request(
             state,
             required_size,
@@ -162,6 +162,18 @@ impl<Endpoint: Ord + Clone> BlockHandler<Endpoint> {
     }
 
     Ok(false)
+  }
+
+  /// Hack to work around the lack of an API to compute the size of a message before
+  /// producing it.
+  fn compute_packet_size_hack(packet: &mut Packet) -> usize {
+    let moved_payload = std::mem::take(&mut packet.payload);
+    let size_sans_payload =
+        packet.to_bytes().expect("Internal error encoding packet")
+            .len();
+    packet.payload = moved_payload;
+
+    size_sans_payload + packet.payload.len()
   }
 
   /// Returns a synthetic client Block2 request if block-wise transfer is required for a response
