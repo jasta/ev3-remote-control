@@ -142,7 +142,7 @@ impl CoapResource for DevicesResource {
   }
 
   fn handle(&self, request: &mut CoapRequest<SocketAddr>, remaining_path: &[String]) -> Result<(), HandlingError> {
-    let mut reply = request.response.as_mut().ok_or(HandlingError::not_handled())?;
+    let mut reply = request.response.as_mut().ok_or_else(HandlingError::not_handled)?;
 
     let hal = &hal::HAL;
 
@@ -151,21 +151,21 @@ impl CoapResource for DevicesResource {
       None => hal.list_devices(),
       Some(path) if path == "by_driver" => {
         let driver = path_iter.next()
-            .ok_or(HandlingError::bad_request("Missing driver name"))?;
+            .ok_or_else(|| HandlingError::bad_request("Missing driver name"))?;
         hal.by_driver(driver)
       },
       _ => return Err(HandlingError::not_found())
     }
-        .map_err(|e| HandlingError::internal(e))?;
+        .map_err(HandlingError::internal)?;
 
     let matches_result: Result<Vec<_>, _> = matches.into_iter()
         .map(|d| Device::from_hal(d))
         .collect();
-    let matches_json = matches_result.map_err(|e| HandlingError::internal(e))?;
+    let matches_json = matches_result.map_err(HandlingError::internal)?;
 
     reply.message.set_content_format(ContentFormat::ApplicationJSON);
     let payload = serde_json::to_string(&matches_json)
-        .map_err(|e| HandlingError::internal(e))?;
+        .map_err(HandlingError::internal)?;
     reply.message.payload = payload.into_bytes();
     Ok(())
   }
@@ -186,7 +186,7 @@ impl Device {
       HalDeviceType::Actuator => "actuator",
     }.to_owned();
     let attributes = hal.get_applicable_attributes()?.into_iter()
-        .map(|a| Attribute::from_hal(a))
+        .map(Attribute::from_hal)
         .collect();
     Ok(Self {
       type_name,
