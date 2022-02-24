@@ -42,6 +42,15 @@ pub struct HandlingError {
   message: String
 }
 
+impl Display for HandlingError {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_str(format!("Handling error {:?}: {}", self.code, self.message).as_str())
+  }
+}
+
+impl std::error::Error for HandlingError {
+}
+
 impl HandlingError {
   pub fn not_handled() -> Self {
     Self { code: None, message: "Not handled".to_owned() }
@@ -55,6 +64,10 @@ impl HandlingError {
 
   pub fn internal<T: ToString>(e: T) -> Self {
     Self::with_code(ResponseType::InternalServerError, e)
+  }
+
+  pub fn method_not_supported() -> Self {
+    Self::with_code(ResponseType::MethodNotAllowed, "Method not supported")
   }
 
   pub fn with_code<T: ToString>(code: ResponseType, e: T) -> Self {

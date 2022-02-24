@@ -92,8 +92,8 @@ pub enum HalAttributeType {
   UInt16,
   UInt32,
   UInt64,
-  Float,
-  Doable,
+  Float32,
+  Float64,
   String,
 }
 

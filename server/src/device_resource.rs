@@ -106,10 +106,12 @@
 //!
 //! Response Type: AttributeValue
 
+use std::borrow::Borrow;
+use std::error::Error;
 use std::net::SocketAddr;
 use std::ops::Deref;
 
-use coap_lite::{CoapRequest, ContentFormat};
+use coap_lite::{CoapRequest, ContentFormat, RequestType, ResponseType};
 use coap_lite::link_format::{LINK_ATTR_CONTENT_FORMAT, LINK_ATTR_RESOURCE_TYPE, LinkAttributeWrite};
 
 use serde::Deserialize;
@@ -119,8 +121,7 @@ use crate::coap_resource_server::{CoapResource, HandlingError};
 use crate::{coap_utils, hal};
 use crate::hal::{HalAttribute, HalAttributeType, HalDevice, HalDeviceType, HalError, HalResult};
 
-pub struct DevicesResource {
-}
+pub struct DevicesResource;
 
 impl CoapResource for DevicesResource {
   fn relative_path(&self) -> &str {
@@ -142,32 +143,119 @@ impl CoapResource for DevicesResource {
   }
 
   fn handle(&self, request: &mut CoapRequest<SocketAddr>, remaining_path: &[String]) -> Result<(), HandlingError> {
+    self.handle_internal(request, remaining_path)
+        .map_err(anyhow_error_mapping)
+  }
+}
+
+impl DevicesResource {
+  fn handle_internal(&self, request: &mut CoapRequest<SocketAddr>, remaining_path: &[String]) -> anyhow::Result<()> {
+    let method = *request.get_method();
     let mut reply = request.response.as_mut().ok_or_else(HandlingError::not_handled)?;
 
     let hal = &hal::HAL;
 
     let mut path_iter = remaining_path.iter();
-    let matches = match path_iter.next() {
-      None => hal.list_devices(),
-      Some(path) if path == "by_driver" => {
+    let matches = match (method, path_iter.next()) {
+      (RequestType::Get, None) => hal.list_devices()?,
+      (RequestType::Get, Some(path)) if path == "by_driver" => {
         let driver = path_iter.next()
             .ok_or_else(|| HandlingError::bad_request("Missing driver name"))?;
-        hal.by_driver(driver)
+        hal.by_driver(driver)?
       },
-      _ => return Err(HandlingError::not_found())
-    }
-        .map_err(HandlingError::internal)?;
+      (RequestType::Get, _) => Err(HandlingError::not_found())?,
+      _ => Err(HandlingError::method_not_supported())?,
+    };
 
     let matches_result: Result<Vec<_>, _> = matches.into_iter()
-        .map(|d| Device::from_hal(d))
+        .map(Device::from_hal)
         .collect();
-    let matches_json = matches_result.map_err(HandlingError::internal)?;
+    let matches_json = matches_result?;
 
     reply.message.set_content_format(ContentFormat::ApplicationJSON);
-    let payload = serde_json::to_string(&matches_json)
-        .map_err(HandlingError::internal)?;
+    let payload = serde_json::to_string(&matches_json)?;
     reply.message.payload = payload.into_bytes();
     Ok(())
+  }
+}
+
+pub struct SingleDeviceResource;
+
+impl CoapResource for SingleDeviceResource {
+  fn relative_path(&self) -> &str {
+    "device"
+  }
+
+  fn debug_name(&self) -> &str {
+    "DeviceResource"
+  }
+
+  fn is_discoverable(&self) -> bool {
+    true
+  }
+
+  fn write_attributes<'a, 'b>(&self, writer: LinkAttributeWrite<'a, 'b, String>) -> LinkAttributeWrite<'a, 'b, String> {
+    writer
+        .attr_quoted(LINK_ATTR_RESOURCE_TYPE, "device")
+        .attr_u32(LINK_ATTR_CONTENT_FORMAT, usize::from(ContentFormat::ApplicationJSON) as u32)
+  }
+
+  fn handle(&self, request: &mut CoapRequest<SocketAddr>, remaining_path: &[String]) -> Result<(), HandlingError> {
+    self.handle_internal(request, remaining_path)
+        .map_err(anyhow_error_mapping)
+  }
+}
+
+impl SingleDeviceResource {
+  fn handle_internal(&self, request: &mut CoapRequest<SocketAddr>, remaining_path: &[String]) -> anyhow::Result<()> {
+    let method = *request.get_method();
+    let mut reply = request.response.as_mut().ok_or_else(HandlingError::not_handled)?;
+
+    let hal = &hal::HAL;
+
+    let mut path_iter = remaining_path.iter();
+    let device = match (method, path_iter.next()) {
+      (RequestType::Get, None) => Err(HandlingError::bad_request("Missing address"))?,
+      (RequestType::Get, Some(address)) => {
+        hal.by_address(address)?.ok_or_else(HandlingError::not_found)?
+      },
+      _ => Err(HandlingError::method_not_supported())?
+    };
+
+    let payload = match (method, path_iter.next()) {
+      (RequestType::Get, None) => {
+        serde_json::to_string(&Device::from_hal(device)?)?
+      },
+      (RequestType::Get, Some(path)) if path == "attribute" => {
+        match path_iter.next() {
+          None => {
+            let values: Result<Vec<_>, _> = device.get_applicable_attributes()?.into_iter()
+                .map(|a| AttributeValue::from_hal(&device, &a))
+                .collect();
+            serde_json::to_string(&values?)?
+          },
+          Some(attribute) => {
+            let attribute = device.get_applicable_attributes()?.into_iter()
+                .find(|a| &a.name == attribute)
+                .ok_or_else(HandlingError::not_found)?;
+            let value = AttributeValue::from_hal(&device, &attribute)?;
+            serde_json::to_string(&value)?
+          },
+        }
+      },
+      _ => Err(HandlingError::method_not_supported())?,
+    };
+
+    reply.message.set_content_format(ContentFormat::ApplicationJSON);
+    reply.message.payload = payload.into_bytes();
+    Ok(())
+  }
+}
+
+fn anyhow_error_mapping(error: anyhow::Error) -> HandlingError {
+  match error.downcast_ref::<HandlingError>() {
+    Some(e) => e.clone(),
+    None => HandlingError::internal(error),
   }
 }
 
@@ -180,7 +268,7 @@ struct Device {
 }
 
 impl Device {
-  fn from_hal(hal: Box<dyn HalDevice>) -> HalResult<Self> {
+  pub fn from_hal(hal: Box<dyn HalDevice>) -> HalResult<Self> {
     let type_name = match hal.get_type()? {
       HalDeviceType::Sensor => "sensor",
       HalDeviceType::Actuator => "actuator",
@@ -206,7 +294,7 @@ struct Attribute {
 }
 
 impl Attribute {
-  fn from_hal(hal: HalAttribute) -> Self {
+  pub fn from_hal(hal: HalAttribute) -> Self {
     let data_type = match hal.data_type {
       HalAttributeType::Int8 => "int8",
       HalAttributeType::Int16 => "int16",
@@ -216,8 +304,8 @@ impl Attribute {
       HalAttributeType::UInt16 => "int16",
       HalAttributeType::UInt32 => "int32",
       HalAttributeType::UInt64 => "int64",
-      HalAttributeType::Float => "float",
-      HalAttributeType::Doable => "double",
+      HalAttributeType::Float32 => "float",
+      HalAttributeType::Float64 => "double",
       HalAttributeType::String => "string",
     }.to_owned();
     let type_name = if hal.is_array {
@@ -238,4 +326,58 @@ impl Attribute {
 struct AttributeValue {
   name: String,
   value: serde_json::Value,
+}
+
+impl AttributeValue {
+  pub fn from_hal(
+      device: &Box<dyn HalDevice>,
+      attr: &HalAttribute,
+  ) -> HalResult<Self> {
+    let value_str = device.get_attribute_str(attr.name.as_str())?;
+
+    let value = if attr.is_array {
+      let values: Result<Vec<_>, _> = value_str.split(' ')
+          .map(|v| Self::convert_value(attr, v))
+          .collect();
+      serde_json::Value::Array(values?)
+    } else {
+      Self::convert_value(attr, &value_str)?
+    };
+
+    Ok(Self { name: attr.name.clone(), value })
+  }
+
+  fn convert_value(attribute: &HalAttribute, value: &str) -> Result<serde_json::Value, HalError> {
+    let converted = match attribute.data_type {
+      HalAttributeType::Int8 |
+          HalAttributeType::Int16 |
+          HalAttributeType::Int32 |
+          HalAttributeType::Int64 => {
+        value.parse::<i64>().ok().map(|x| serde_json::Value::Number(x.into()))
+      },
+      HalAttributeType::UInt8 |
+          HalAttributeType::UInt16 |
+          HalAttributeType::UInt32 |
+          HalAttributeType::UInt64 => {
+        value.parse::<u64>().ok().map(|x| serde_json::Value::Number(x.into()))
+      }
+      HalAttributeType::Float32 |
+          HalAttributeType::Float64 => {
+        value.parse::<f64>().ok()
+            .and_then(serde_json::Number::from_f64)
+            .map(|x| serde_json::Value::Number(x))
+      }
+      HalAttributeType::String => {
+        Some(serde_json::Value::String(value.to_owned()))
+      }
+    };
+
+    converted.ok_or_else(|| {
+      HalError::InternalError(
+        format!(
+          "unexpected conversion error for {} with value: {}",
+          attribute.name,
+          value))
+    })
+  }
 }

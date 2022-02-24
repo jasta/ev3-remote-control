@@ -18,6 +18,7 @@ use crate::block_handler::{BlockHandler, BlockHandlerConfig};
 
 use crate::coap_resource_server::{CoapResource, CoapResourceServer, CoapResourceServerBuilder, HandlingError};
 use crate::device_resource::DevicesResource;
+use crate::device_resource::SingleDeviceResource;
 use crate::uri_query_helper::UriQueryHelper;
 
 mod coap_resource_server;
@@ -61,6 +62,7 @@ fn run_server_forever(addr: (String, u16)) {
     let server_handler = CoapResourceServer::builder()
         .add_resource(Box::new(TimeResource {}))
         .add_resource(Box::new(DevicesResource {}))
+        .add_resource(Box::new(SingleDeviceResource {}))
         .build();
 
     let mut server = Server::new(addr).unwrap();
