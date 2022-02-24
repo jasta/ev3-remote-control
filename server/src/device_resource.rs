@@ -110,8 +110,10 @@ use std::borrow::Borrow;
 use std::error::Error;
 use std::net::SocketAddr;
 use std::ops::Deref;
+use std::slice::Iter;
+use anyhow::anyhow;
 
-use coap_lite::{CoapRequest, ContentFormat, RequestType, ResponseType};
+use coap_lite::{CoapRequest, ContentFormat, MessageClass, RequestType, ResponseType};
 use coap_lite::link_format::{LINK_ATTR_CONTENT_FORMAT, LINK_ATTR_RESOURCE_TYPE, LinkAttributeWrite};
 
 use serde::Deserialize;
@@ -209,24 +211,39 @@ impl CoapResource for SingleDeviceResource {
 impl SingleDeviceResource {
   fn handle_internal(&self, request: &mut CoapRequest<SocketAddr>, remaining_path: &[String]) -> anyhow::Result<()> {
     let method = *request.get_method();
-    let mut reply = request.response.as_mut().ok_or_else(HandlingError::not_handled)?;
+    if request.response.is_none() {
+      Err(HandlingError::not_handled())?;
+    }
 
     let hal = &hal::HAL;
 
     let mut path_iter = remaining_path.iter();
-    let device = match (method, path_iter.next()) {
-      (RequestType::Get, None) => Err(HandlingError::bad_request("Missing address"))?,
-      (RequestType::Get, Some(address)) => {
+    let device = match (path_iter.next()) {
+      None => Err(HandlingError::bad_request("Missing address"))?,
+      Some(address) => {
         hal.by_address(address)?.ok_or_else(HandlingError::not_found)?
       },
-      _ => Err(HandlingError::method_not_supported())?
     };
 
-    let payload = match (method, path_iter.next()) {
-      (RequestType::Get, None) => {
+    match method {
+      RequestType::Get => self.handle_get_internal(device, request, path_iter.as_slice()),
+      RequestType::Put => self.handle_put_internal(device, request, path_iter.as_slice()),
+      _ => Err(HandlingError::method_not_supported())?
+    }
+  }
+
+  fn handle_get_internal(
+    &self,
+    device: Box<dyn HalDevice>,
+    request: &mut CoapRequest<SocketAddr>,
+    remaining_path: &[String]
+  ) -> anyhow::Result<()> {
+    let mut path_iter = remaining_path.iter();
+    let payload = match path_iter.next() {
+      None => {
         serde_json::to_string(&Device::from_hal(device)?)?
       },
-      (RequestType::Get, Some(path)) if path == "attribute" => {
+      Some(path) if path == "attribute" => {
         match path_iter.next() {
           None => {
             let values: Result<Vec<_>, _> = device.get_applicable_attributes()?.into_iter()
@@ -246,8 +263,36 @@ impl SingleDeviceResource {
       _ => Err(HandlingError::method_not_supported())?,
     };
 
+    let mut reply = request.response.as_mut().unwrap();
     reply.message.set_content_format(ContentFormat::ApplicationJSON);
     reply.message.payload = payload.into_bytes();
+    Ok(())
+  }
+
+  fn handle_put_internal(
+    &self,
+    mut device: Box<dyn HalDevice>,
+    request: &mut CoapRequest<SocketAddr>,
+    remaining_path: &[String]
+  ) -> anyhow::Result<()> {
+    let mut path_iter = remaining_path.iter();
+    match path_iter.next() {
+      Some(path) if path == "attribute" => {
+        let payload_str = String::from_utf8(request.message.payload.clone())?;
+        let values = serde_json::from_str::<Vec<AttributeValue>>(&payload_str)?;
+
+        for value in &values {
+          // TODO: We really need to yield errors for each write, not just abort the
+          // whole thing with no reasonable rollback.
+          device.set_attribute_str(&value.name, &value.to_hal_value_str()?)?;
+        }
+      },
+      _ => Err(HandlingError::not_found())?
+    }
+
+    let mut reply = request.response.as_mut().unwrap();
+    reply.message.header.code = MessageClass::Response(ResponseType::Changed);
+    reply.message.payload.clear();
     Ok(())
   }
 }
@@ -345,6 +390,25 @@ impl AttributeValue {
     };
 
     Ok(Self { name: attr.name.clone(), value })
+  }
+
+  fn to_hal_value_str(&self) -> anyhow::Result<String> {
+    match &self.value {
+      serde_json::Value::String(s) => Ok(s.clone()),
+      serde_json::Value::Number(n) => {
+        let num_as_str = if n.is_i64() {
+          n.as_i64().map(|x| x.to_string())
+        } else if n.is_u64() {
+          n.as_u64().map(|x| x.to_string())
+        } else if n.is_f64() {
+          n.as_f64().map(|x| x.to_string())
+        } else {
+          None
+        };
+        num_as_str.ok_or_else(|| anyhow!("n={}", n))
+      },
+      n => Err(anyhow!("Can't serialize {:?}", n)),
+    }
   }
 
   fn convert_value(attribute: &HalAttribute, value: &str) -> Result<serde_json::Value, HalError> {

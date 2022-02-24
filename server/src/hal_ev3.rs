@@ -27,7 +27,26 @@ impl HalEv3 {
   }
 
   fn find_device_by_address(&self, address: &str) -> io::Result<Option<Box<dyn HalDevice>>> {
-    todo!()
+    for sysfs_class in ["tacho-motor", "lego-sensor"] {
+      for entry_result in read_dir(format!("/sys/class/{}", sysfs_class))? {
+        if let Ok(entry) = entry_result {
+          if let Some(device_name) = entry.file_name().to_str() {
+            let full_device_path = format!("/sys/class/{}/{}", sysfs_class, device_name);
+            if let Ok(attr) = Attribute::from_path(&format!("{}/address", full_device_path)) {
+              if let Ok(value) = attr.get::<String>() {
+                if value == address {
+                  return Ok(Some(Box::new(HalDeviceEv3 {
+                    sysfs_class: sysfs_class.to_owned(),
+                    full_device_path: full_device_path.to_owned()
+                  })));
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    Ok(None)
   }
 }
 
@@ -128,12 +147,14 @@ impl HalDevice for HalDeviceEv3 {
   }
 
   fn get_attribute_str(&self, name: &str) -> HalResult<String> {
+    log::debug!("Reading attribute {}...", name);
     Attribute::from_path(&format!("{}/{}", self.full_device_path, name))
         .and_then(|a| a.get())
         .map_err(convert_to_hal_error)
   }
 
   fn set_attribute_str(&mut self, name: &str, value: &str) -> HalResult<()> {
+    log::debug!("Writing attribute {}={}...", name, value);
     Attribute::from_path(&format!("{}/{}", self.full_device_path, name))
         .and_then(|a| a.set(value))
         .map_err(convert_to_hal_error)
