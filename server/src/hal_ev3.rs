@@ -70,7 +70,7 @@ impl HalDevice for HalDeviceEv3 {
     match self.sysfs_class.as_str() {
       "tacho-motor" => Ok(HalDeviceType::Actuator),
       "lego-sensor" => Ok(HalDeviceType::Sensor),
-      v @ _ => Err(HalError::InternalError(format!("Unknown sysfs class: {}", v))),
+      unknown => Err(HalError::InternalError(format!("Unknown sysfs class: {}", unknown))),
     }
   }
 
@@ -85,7 +85,7 @@ impl HalDevice for HalDeviceEv3 {
   fn get_applicable_attributes(&self) -> HalResult<Vec<HalAttribute>> {
     let mut result = Vec::with_capacity(64);
 
-    let common_attrs = result.extend([
+    result.extend([
       HalAttribute::new_readonly(HalAttributeType::String, "address"),
       HalAttribute::new_writeonly(HalAttributeType::String, "command"),
       HalAttribute::new_readonly_array(HalAttributeType::String, "commands"),
@@ -130,13 +130,13 @@ impl HalDevice for HalDeviceEv3 {
   fn get_attribute_str(&self, name: &str) -> HalResult<String> {
     Attribute::from_path(&format!("{}/{}", self.full_device_path, name))
         .and_then(|a| a.get())
-        .map_err(|e| convert_to_hal_error(e))
+        .map_err(convert_to_hal_error)
   }
 
   fn set_attribute_str(&mut self, name: &str, value: &str) -> HalResult<()> {
     Attribute::from_path(&format!("{}/{}", self.full_device_path, name))
         .and_then(|a| a.set(value))
-        .map_err(|e| convert_to_hal_error(e))
+        .map_err(convert_to_hal_error)
   }
 }
 
