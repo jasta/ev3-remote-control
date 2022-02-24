@@ -177,7 +177,10 @@ impl CoapResourceServer {
     };
 
     if let Err(err) = final_result {
-      Self::apply_response_from_error(&mut request, err)
+      Self::apply_response_from_error(&mut request, err);
+
+      // If the error happens to need block2 handling, let's do that here...
+      let _result = self.block_handler.lock().unwrap().intercept_response(&mut request);
     }
 
     request.response
