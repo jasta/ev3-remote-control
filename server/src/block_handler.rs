@@ -3,19 +3,30 @@
 //! Supports both Block1 and Block2.
 
 use std::cmp::min;
-use std::ops::Deref;
+use std::collections::Bound;
+use std::ops::{Deref, RangeBounds};
 use std::time::Duration;
 
-use coap_lite::{CoapOption, CoapRequest, MessageClass, Packet};
-use log::warn;
+use anyhow::anyhow;
+use coap_lite::{CoapOption, CoapRequest, MessageClass, Packet, ResponseType};
+use log::{error, warn};
 use lru_time_cache::LruCache;
 
 use crate::block_value::BlockValue;
 use crate::coap_resource_server::HandlingError;
 use crate::coap_utils;
 
-/// The maximum amount adding a block2 option to the response could add to the total size.
-const BLOCK2_OPTION_MAX_LENGTH: usize = 8;
+/// The maximum amount adding a block1 & block2 option to the message could add to the total size.
+const BLOCK_OPTIONS_MAX_LENGTH: usize = 12;
+
+/// Maximum amount we're willing to extend a client cached payload without the client committing
+/// to having to send us the bytes.  This prevents a common denial of service (DoS) attack where
+/// the client claims that they want to send say block num 10000 of a 1KB block size request
+/// and we preallocate 10MB of space to honor the request and explode.  Note this is not limiting
+/// the total cached payload we can accept, merely the amount the client can "jump" on us
+/// between each request.  We need some wiggle room here to accommodate for retransmits and such
+/// but not so much that we open ourselves up to the DoS.
+const MAXIMUM_UNCOMMITTED_BUFFER_RESERVE_LENGTH: usize = 16*1024;
 
 /// Default taken from RFC 7252.
 const DEFAULT_MAX_TOTAL_MESSAGE_SIZE: usize = 1152;
@@ -74,6 +85,82 @@ impl<Endpoint: Ord + Clone> BlockHandler<Endpoint> {
     &mut self, request: &mut CoapRequest<Endpoint>
   ) -> Result<bool, HandlingError> {
     let state = self.states.entry(request.deref().into()).or_insert(BlockState::default());
+    let block1_handled = Self::maybe_handle_request_block1(
+      request,
+      self.config.max_total_message_size,
+      state)?;
+    if block1_handled {
+      return Ok(true)
+    }
+
+    let block2_handled = Self::maybe_handle_request_block2(request, state)?;
+    if block2_handled {
+      return Ok(true)
+    }
+
+    Ok(false)
+  }
+
+  fn maybe_handle_request_block1(
+    request: &mut CoapRequest<Endpoint>,
+    max_total_message_size: usize,
+    state: &mut BlockState
+  ) -> Result<bool, HandlingError> {
+    let request_block1 = request.message
+        .get_first_option_as::<BlockValue>(CoapOption::Block1)
+        .and_then(|x| x.ok());
+    let maybe_response_block1 = Self::negotiate_block_size_if_necessary(
+      request_block1.as_ref(),
+      Self::compute_message_size_hack(&mut request.message),
+      request.message.payload.len(),
+      max_total_message_size)?;
+
+    match (request_block1, maybe_response_block1) {
+      (Some(request_block1), Some(response_block1)) => {
+        if state.cached_request_payload.is_none() {
+          state.cached_request_payload = Some(Vec::new());
+        }
+        let cached_payload = state.cached_request_payload.as_mut().unwrap();
+
+        let payload_offset = usize::from(request_block1.num) * request_block1.size();
+        extending_splice(
+          cached_payload,
+          payload_offset..payload_offset + request_block1.size(),
+          request.message.payload.iter().copied(),
+          MAXIMUM_UNCOMMITTED_BUFFER_RESERVE_LENGTH)
+            .map_err(HandlingError::internal)?;
+
+        if request_block1.more {
+          let response = request.response.as_mut().ok_or_else(HandlingError::not_handled)?;
+          response.message.add_option_as(CoapOption::Block1, response_block1);
+          response.message.header.code = MessageClass::Response(ResponseType::Continue);
+          Ok(true)
+        } else {
+          let cached_payload = std::mem::take(&mut state.cached_request_payload).unwrap();
+          request.message.payload = cached_payload;
+
+          // This is a little bit hacky, we really should be doing this in intercept_response
+          // but whatever, I doubt this will create any issues in practice.
+          let response = request.response.as_mut().ok_or_else(HandlingError::not_handled)?;
+          response.message.add_option_as(CoapOption::Block1, response_block1);
+
+          Ok(false)
+        }
+      },
+      (None, Some(response_block1)) => {
+        let response = request.response.as_mut().ok_or_else(HandlingError::not_handled)?;
+        response.message.add_option_as(CoapOption::Block1, response_block1);
+        response.message.header.code = MessageClass::Response(ResponseType::RequestEntityTooLarge);
+        Ok(true)
+      },
+      _ => Ok(false)
+    }
+  }
+
+  fn maybe_handle_request_block2(
+    request: &mut CoapRequest<Endpoint>,
+    state: &mut BlockState,
+  ) -> Result<bool, HandlingError> {
     let maybe_block2 = request.message
         .get_first_option_as::<BlockValue>(CoapOption::Block2)
         .and_then(|x| x.ok());
@@ -81,7 +168,10 @@ impl<Endpoint: Ord + Clone> BlockHandler<Endpoint> {
 
     if let Some(block2) = maybe_block2 {
       if let Some(ref response) = state.cached_response {
-        Self::maybe_serve_cached_response(request, block2, response)?;
+        let has_more_chunks = Self::maybe_serve_cached_response(request, block2, response)?;
+        if !has_more_chunks {
+          state.cached_response = None
+        }
         return Ok(true);
       }
     }
@@ -93,7 +183,7 @@ impl<Endpoint: Ord + Clone> BlockHandler<Endpoint> {
     request: &mut CoapRequest<Endpoint>,
     request_block2: BlockValue,
     cached_response: &Packet,
-  ) -> Result<(), HandlingError> {
+  ) -> Result<bool, HandlingError> {
     let response = request.response.as_mut().ok_or_else(HandlingError::not_handled)?;
 
     Self::packet_clone_limited(&mut response.message, cached_response);
@@ -113,8 +203,9 @@ impl<Endpoint: Ord + Clone> BlockHandler<Endpoint> {
     response_payload.clear();
     response_payload.extend(cached_payload_chunk);
 
+    let has_more_chunks = chunks.next().is_some();
     let response_block2 = BlockValue {
-      more: chunks.next().is_some(),
+      more: has_more_chunks,
       ..request_block2
     };
 
@@ -122,7 +213,7 @@ impl<Endpoint: Ord + Clone> BlockHandler<Endpoint> {
       CoapOption::Block2,
       [response_block2].into());
 
-    Ok(())
+    Ok(has_more_chunks)
   }
 
   /// Equivalent to `dst.clone_from(src)` with the exception of not copying message_id or
@@ -142,23 +233,24 @@ impl<Endpoint: Ord + Clone> BlockHandler<Endpoint> {
   /// fragmenting into blocks, the block handler will cache the response and serve it out
   /// via subsequent client requests (that in turn must be directed to [`intercept_request`]).
   ///
-  /// Returns true if the response has been manipulated and is being handled using Block2
+  /// Returns true if the response has been manipulated and is being handled using Block1 or Block2
   /// fragmentation; false otherwise
   pub fn intercept_response(&mut self, request: &mut CoapRequest<Endpoint>) -> Result<bool, HandlingError> {
     let state = self.states.entry(request.deref().into()).or_insert(BlockState::default());
     if let Some(ref mut response) = request.response {
       // Don't do anything if the caller appears to be trying to implement this manually.
       if response.message.get_option(CoapOption::Block2).is_none() {
-        let required_size = Self::compute_packet_size_hack(&mut response.message);
-        if let Some(request_block2) = Self::maybe_synthesize_block2_request(
-            state,
-            required_size,
+        if let Some(request_block2) = Self::negotiate_block_size_if_necessary(
+            state.last_request_block2.as_ref(),
+            Self::compute_message_size_hack(&mut response.message),
             response.message.payload.len(),
-            self.config.max_total_message_size) {
+            self.config.max_total_message_size)? {
           let cached_response = response.message.clone();
-          Self::maybe_serve_cached_response(request, request_block2, &cached_response)?;
-          state.cached_response = Some(cached_response);
-          return Ok(true);
+          let has_more_chunks = Self::maybe_serve_cached_response(request, request_block2, &cached_response)?;
+          if has_more_chunks {
+            state.cached_response = Some(cached_response);
+            return Ok(true);
+          }
         }
       }
     }
@@ -168,7 +260,7 @@ impl<Endpoint: Ord + Clone> BlockHandler<Endpoint> {
 
   /// Hack to work around the lack of an API to compute the size of a message before
   /// producing it.
-  fn compute_packet_size_hack(packet: &mut Packet) -> usize {
+  fn compute_message_size_hack(packet: &mut Packet) -> usize {
     let moved_payload = std::mem::take(&mut packet.payload);
     let size_sans_payload =
         packet.to_bytes().expect("Internal error encoding packet")
@@ -178,41 +270,82 @@ impl<Endpoint: Ord + Clone> BlockHandler<Endpoint> {
     size_sans_payload + packet.payload.len()
   }
 
-  /// Returns a synthetic client Block2 request if block-wise transfer is required for a response
-  /// payload of size `required_size`.  This synthetic block will be used to serve
-  /// the response in the same way that a real Block2 client request would serve from cache.
-  fn maybe_synthesize_block2_request(
-    state: &BlockState,
-    required_size: usize,
-    payload_size: usize,
-    max_total_message_size: usize
-  ) -> Option<BlockValue> {
-    if required_size <= max_total_message_size {
-      return None;
-    }
+  fn negotiate_block_size_if_necessary(
+    request_block: Option<&BlockValue>,
+    message_size: usize,
+    total_payload_size: usize,
+    max_total_message_size: usize,
+  ) -> Result<Option<BlockValue>, HandlingError> {
+    let max_non_payload_size = (message_size + BLOCK_OPTIONS_MAX_LENGTH) - total_payload_size;
+    let max_block_size = max_total_message_size.checked_sub(max_non_payload_size)
+        .ok_or_else(|| HandlingError::internal(
+          &format!(
+            "Message too large to encode at any block size: {} exceeds {}",
+            max_total_message_size,
+            max_non_payload_size)))?;
 
-    let expected_non_payload_size = (required_size + BLOCK2_OPTION_MAX_LENGTH) - payload_size;
-    let suggested_block_size = max_total_message_size.checked_sub(expected_non_payload_size);
+    let maybe_response_block = match request_block {
+      Some(request_block) => {
+        // Client requested block encoding so let's give them that, but not larger
+        // than our max block size.
+        let negotiated_block_size = min(request_block.size(), max_block_size);
 
-    let negotiated_block_size = min(
-      state.last_request_block2.as_ref()
-          .map(|b| b.size())
-          .unwrap_or(usize::MAX),
-      suggested_block_size.unwrap_or(usize::MAX));
+        let reply_start_offset = usize::from(request_block.num) * request_block.size();
+        let reply_end_offset = reply_start_offset + negotiated_block_size;
 
-    let block2 = BlockValue::new(
-      usize::from(state.last_request_block2.as_ref().map(|b| b.num).unwrap_or(0)) /* num */,
-      false /* more */,
-      negotiated_block_size);
+        let num = reply_start_offset / negotiated_block_size;
+        let more= reply_end_offset < total_payload_size;
 
-    match block2 {
-      Ok(block2) => Some(block2),
-      Err(e) => {
-        warn!("Cannot convert block size {} to size_exponent: {}", negotiated_block_size, e);
-        None
+        Some(BlockValue::new(num, more, negotiated_block_size))
+      },
+      None => {
+        if total_payload_size < max_block_size {
+          // The payload fits, and the client didn't request we do any different, so proceed
+          // normally without block-wise transfer.
+          None
+        } else {
+          // Client did not ask for it, but we need block encoding for this to work given our
+          // max block size.
+          Some(BlockValue::new(0, true /* more */, max_block_size))
+        }
       }
+    };
+
+    match maybe_response_block {
+      Some(block) => {
+        block.map(Some).map_err(HandlingError::internal)
+      },
+      None => Ok(None)
     }
   }
+}
+
+/// Similar to [Vec::slice] except that the Vec's length may be extended to support the splice,
+/// but only up to an increase of `maximum_reserve_len` (for security reasons if
+/// the data you're receiving is untrusted ensure this is reasonably limited to avoid memory
+/// pressure denial of service attacks).
+fn extending_splice<R, I, T>(
+  dst: &mut Vec<T>,
+  range: R,
+  replace_with: I,
+  maximum_reserve_len: usize
+) -> anyhow::Result<std::vec::Splice<I::IntoIter>>
+where R: RangeBounds<usize>, I: IntoIterator<Item = T>, T: Default + Copy {
+  let end_index_plus_1 = match range.end_bound() {
+    Bound::Included(&included) => included + 1,
+    Bound::Excluded(&excluded) => excluded,
+    Bound::Unbounded => panic!(),
+  };
+
+  if let Some(extend_len) = end_index_plus_1.checked_sub(dst.len()) {
+    if extend_len > maximum_reserve_len {
+      return Err(anyhow!("extend_len={}, maximum_extend_len={}", extend_len, maximum_reserve_len));
+    }
+    // Safe but inefficient way...
+    dst.extend(std::iter::repeat(T::default()).take(extend_len));
+  }
+
+  Ok(dst.splice(range, replace_with))
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
@@ -241,13 +374,23 @@ struct BlockState {
 
   /// Packet we need to serve from if any future block-wise transfer requests come in.
   cached_response: Option<Packet>,
+
+  /// Payload we are building up from a series of client requests.  Note that there is a deliberate
+  /// lack of symmetry between the cached response and request due to the fact that the client
+  /// is responsible for issuing multiple requsets as we build up the cached payload.  This means
+  /// that the client is ultimately responsible for making sure the last submitted packet
+  /// is the one containing the interesting options we will need to handle the request and that
+  /// we simply need to copy the payload into it.
+  cached_request_payload: Option<Vec<u8>>,
 }
 
 #[cfg(test)]
 mod tests {
   use std::collections::LinkedList;
-  use coap_lite::option_value::OptionValueString;
+
   use coap_lite::{CoapResponse, RequestType, ResponseType};
+  use coap_lite::option_value::OptionValueString;
+
   use super::*;
 
   #[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
@@ -309,6 +452,93 @@ mod tests {
     assert_eq!(
       String::from_utf8(received_payload).unwrap(),
       String::from_utf8(expected_payload).unwrap());
+
+    // Now verify that the cached entry is cleared...
+    let mut followup_req = create_get_request("test", u16::MAX, None);
+    let followup_block2 = BlockValue::new(0, false, 16).unwrap();
+    followup_req.message.add_option_as::<BlockValue>(CoapOption::Block2, followup_block2);
+    let followup_response = harness.exchange_messages(&mut followup_req, move |received_request| {
+      let mut sent_response = received_request.response.as_mut().unwrap();
+      sent_response.message.header.code = MessageClass::Response(ResponseType::Content);
+      sent_response.message.payload = "small".as_bytes().to_vec();
+      InterceptPolicy::NotExpected
+    }).unwrap();
+
+    assert_eq!(
+      String::from_utf8(followup_response.message.payload).unwrap(),
+      "small".to_owned());
+  }
+
+  #[test]
+  fn test_server_asserts_block1_encoding_required() {
+    let block = "0123456789\n";
+
+    let mut harness = TestServerHarness::new(32);
+
+    let full_payload = block.repeat(8).into_bytes();
+
+    let mut sent_request = create_put_request("test", 1, &full_payload, None);
+    let received_response = harness.exchange_messages_using_cache(&mut sent_request).unwrap();
+
+    assert_eq!(
+        received_response.message.header.code,
+        MessageClass::Response(ResponseType::RequestEntityTooLarge));
+    let received_block =
+        received_response.message.get_first_option_as::<BlockValue>(CoapOption::Block1)
+            .expect("Must respond with Block1 option")
+            .expect("Must provide valid Block1 option");
+    assert!(received_block.more);
+  }
+
+  #[test]
+  fn test_cached_request_happy_path() {
+    let block = "0123456789\n";
+
+    let mut harness = TestServerHarness::new(32);
+
+    let sent_payload = block.repeat(8).into_bytes();
+    let expected_payload = sent_payload.clone();
+
+    let block_size = 16;
+
+    let chunks = sent_payload.chunks(block_size);
+    let total_chunks = chunks.len();
+
+    for (num, chunk) in chunks.enumerate() {
+      let has_more_chunks = num + 1 < total_chunks;
+
+      let block = BlockValue::new(num, has_more_chunks, block_size).unwrap();
+      let mut sent_request = create_put_request("test", 1, chunk, Some(block));
+
+      let received_response = if has_more_chunks {
+        let received_response = harness.exchange_messages_using_cache(&mut sent_request).unwrap();
+        assert_eq!(
+          received_response.message.header.code,
+          MessageClass::Response(ResponseType::Continue));
+        received_response
+      } else {
+        let received_response = harness.exchange_messages(&mut sent_request, |received_request| {
+         assert_eq!(
+            String::from_utf8(received_request.message.payload.clone()).unwrap(),
+            String::from_utf8(expected_payload.clone()).unwrap());
+          let sent_response = received_request.response.as_mut().unwrap();
+          sent_response.message.header.code = MessageClass::Response(ResponseType::Changed);
+          InterceptPolicy::NotExpected
+        }).unwrap();
+        assert_eq!(
+          received_response.message.header.code,
+          MessageClass::Response(ResponseType::Changed));
+        received_response
+      };
+
+      let received_block =
+          received_response.message.get_first_option_as::<BlockValue>(CoapOption::Block1)
+              .unwrap()
+              .unwrap();
+
+      // This test isn't expecting renegotiation...
+      assert_eq!(received_block.size(), block_size);
+    }
   }
 
   struct TestServerHarness {
@@ -380,16 +610,37 @@ mod tests {
   }
 
   fn create_get_request(path: &str, mid: u16, block2: Option<BlockValue>) -> CoapRequest<TestEndpoint> {
+    create_request(RequestType::Get, path, mid, None, block2)
+  }
+
+  fn create_put_request(path: &str, mid: u16, payload: &[u8], block1: Option<BlockValue>) -> CoapRequest<TestEndpoint> {
+    let mut request = create_request(RequestType::Put, path, mid, block1, None);
+    request.message.payload.extend(payload);
+    request
+  }
+
+  fn create_request(
+      method: RequestType,
+      path: &str,
+      mid: u16,
+      block1: Option<BlockValue>,
+      block2: Option<BlockValue>) -> CoapRequest<TestEndpoint> {
     let mut packet = Packet::new();
-    packet.header.code = MessageClass::Request(RequestType::Get);
+    packet.header.code = MessageClass::Request(method);
 
     let uri_path: LinkedList<_> = path.split('/')
         .map(|x| OptionValueString(x.to_owned()))
         .collect();
     packet.set_options_as(CoapOption::UriPath, uri_path);
 
-    if let Some(block2) = block2 {
-      packet.add_option_as(CoapOption::Block2, block2);
+    let options = vec![
+      (CoapOption::Block1, block1),
+      (CoapOption::Block2, block2)
+    ];
+    for (key, value) in options {
+      if let Some(value) = value {
+        packet.add_option_as(key, value);
+      }
     }
 
     packet.header.message_id = mid;
