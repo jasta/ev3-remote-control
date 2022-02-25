@@ -9,7 +9,6 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 use coap_lite::{CoapOption, CoapRequest, MessageClass, Packet, ResponseType};
-use log::{error, warn};
 use lru_time_cache::LruCache;
 
 use crate::block_value::BlockValue;
