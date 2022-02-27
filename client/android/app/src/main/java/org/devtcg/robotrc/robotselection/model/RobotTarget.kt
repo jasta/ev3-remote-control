@@ -1,4 +1,4 @@
-package org.devtcg.robotrc.robotdata.model
+package org.devtcg.robotrc.robotselection.model
 
 data class RobotTarget(
   val host: String,

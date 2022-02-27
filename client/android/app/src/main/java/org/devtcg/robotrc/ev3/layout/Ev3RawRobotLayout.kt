@@ -1,14 +1,14 @@
-package org.devtcg.robotrc.ev3.widgets
+package org.devtcg.robotrc.ev3.layout
 
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import org.devtcg.robotrc.databinding.Ev3RawRobotLayoutBinding
-import org.devtcg.robotrc.robotlayout.api.DeviceAttributesSnapshot
+import org.devtcg.robotrc.robotdata.model.DeviceAttributesSnapshot
 import org.devtcg.robotrc.robotdata.api.DeviceModelApi
-import org.devtcg.robotrc.robotlayout.api.DeviceType
-import org.devtcg.robotrc.robotlayout.api.RobotLayout
+import org.devtcg.robotrc.robotdata.model.DeviceType
+import org.devtcg.robotrc.robotview.api.RobotLayout
 
 class Ev3RawRobotLayout: RobotLayout {
   companion object {
@@ -47,20 +47,22 @@ class Ev3RawRobotLayout: RobotLayout {
     if (viewHolder.widget != targetWidgetClass) {
       val context = rootBinding.root.context
 
+      viewHolder.clearBinding()
+
       if (targetWidgetClass == null) {
         Log.w(TAG, "Unsupported device type: ${model.intrinsics.type}")
-        viewHolder.clearBinding()
         return
       } else {
         val widget = targetWidgetClass.newInstance()
-        val view = widget.onCreateView(LayoutInflater.from(context), viewHolder.parent, model)
+        val view = widget.onCreateView(LayoutInflater.from(context), viewHolder.parent)
+        widget.onDeviceModelUpdated(model)
         viewHolder.assignBinding(model, widget, view)
       }
     }
   }
 
   override fun onCreateView(inflater: LayoutInflater, parent: ViewGroup?): View {
-    rootBinding = Ev3RawRobotLayoutBinding.inflate(inflater, parent, true)
+    rootBinding = Ev3RawRobotLayoutBinding.inflate(inflater, parent, false)
 
     initBinding("ev3-ports:outA", rootBinding.outA)
     initBinding("ev3-ports:outB", rootBinding.outB)
@@ -93,6 +95,7 @@ class Ev3RawRobotLayout: RobotLayout {
     }
 
     fun assignBinding(model: DeviceModelApi, widget: DeviceWidget, view: View) {
+      parent.addView(view)
       this.model = model
       this.widget = widget
       this.view = view

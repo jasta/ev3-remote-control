@@ -1,4 +1,4 @@
-package org.devtcg.robotrc.robotlayout.api
+package org.devtcg.robotrc.robotdata.model
 
 data class DeviceIntrinsics(
   val type: DeviceType,

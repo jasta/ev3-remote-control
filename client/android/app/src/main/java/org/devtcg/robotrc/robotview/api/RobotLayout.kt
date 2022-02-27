@@ -1,10 +1,11 @@
-package org.devtcg.robotrc.robotlayout.api
+package org.devtcg.robotrc.robotview.api
 
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.annotation.MainThread
 import org.devtcg.robotrc.robotdata.api.DeviceModelApi
+import org.devtcg.robotrc.robotdata.model.DeviceAttributesSnapshot
 
 @MainThread
 interface RobotLayout {

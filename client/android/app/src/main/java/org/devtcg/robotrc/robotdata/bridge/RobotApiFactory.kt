@@ -3,19 +3,18 @@ package org.devtcg.robotrc.robotdata.bridge
 import androidx.lifecycle.MutableLiveData
 import org.devtcg.robotrc.networkservice.bridge.RemoteControlServiceFactory
 import org.devtcg.robotrc.robotdata.api.DeviceModelApi
-import org.devtcg.robotrc.robotdata.api.RobotApi
-import org.devtcg.robotrc.robotdata.model.RobotTarget
-import org.devtcg.robotrc.robotdata.model.RobotModel
+import org.devtcg.robotrc.robotdata.api.RobotModelApi
+import org.devtcg.robotrc.robotselection.model.RobotTarget
 import org.devtcg.robotrc.robotdata.network.DeviceDataFetcher
-import org.devtcg.robotrc.robotlayout.api.DeviceAttributesSnapshot
+import org.devtcg.robotrc.robotdata.model.DeviceAttributesSnapshot
 import java.util.concurrent.Executors
 
 internal class RobotApiFactory {
-  fun create(target: RobotTarget): RobotApi {
+  fun create(target: RobotTarget): RobotModelApi {
     val allDevices = MutableLiveData<List<DeviceModelApi>>()
     val relevantAttributes = MutableLiveData<Map<String, DeviceAttributesSnapshot>>()
 
-    return RobotApi(
+    return RobotModelApi(
       target,
       allDevices,
       relevantAttributes,

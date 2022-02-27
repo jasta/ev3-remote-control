@@ -1,6 +1,6 @@
 package org.devtcg.robotrc.robotdata.api
 
-import org.devtcg.robotrc.robotlayout.api.ReadWriteSpec
+import org.devtcg.robotrc.robotdata.model.ReadWriteSpec
 
 data class AttributeSpec(
   val name: String,

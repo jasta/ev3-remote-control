@@ -1,7 +1,7 @@
 package org.devtcg.robotrc.robotdata.api
 
-import org.devtcg.robotrc.robotlayout.api.AttributeValueLocal
-import org.devtcg.robotrc.robotlayout.api.DeviceIntrinsics
+import org.devtcg.robotrc.robotdata.model.AttributeValueLocal
+import org.devtcg.robotrc.robotdata.model.DeviceIntrinsics
 
 interface DeviceModelApi {
   val intrinsics: DeviceIntrinsics

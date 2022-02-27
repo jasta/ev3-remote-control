@@ -2,7 +2,7 @@ package org.devtcg.robotrc.mainui
 
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
-import org.devtcg.robotrc.databinding.ActivityFullscreenBinding
+import org.devtcg.robotrc.databinding.MainActivityBinding
 import org.devtcg.robotrc.robotdata.bridge.RobotSelectorBridge
 
 /**
@@ -10,8 +10,7 @@ import org.devtcg.robotrc.robotdata.bridge.RobotSelectorBridge
  * status bar and navigation/system bar) with user interaction.
  */
 class MainActivity : AppCompatActivity() {
-  private lateinit var binding: ActivityFullscreenBinding
-  private lateinit var windowTreatmentAgent: WindowTreatmentAgent
+  private lateinit var binding: MainActivityBinding
   private val robotSelectionDeciderAgent =
     MainUiDeciderAgent(
       supportFragmentManager,
@@ -20,15 +19,9 @@ class MainActivity : AppCompatActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
-    binding = ActivityFullscreenBinding.inflate(layoutInflater)
-    windowTreatmentAgent = WindowTreatmentAgent(this, binding)
-    windowTreatmentAgent.onCreate()
+    binding = MainActivityBinding.inflate(layoutInflater)
+    setContentView(binding.root)
 
     robotSelectionDeciderAgent.onCreate()
-  }
-
-  override fun onPostCreate(savedInstanceState: Bundle?) {
-    super.onPostCreate(savedInstanceState)
-    windowTreatmentAgent.onPostCreate()
   }
 }

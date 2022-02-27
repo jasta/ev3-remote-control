@@ -1,14 +1,13 @@
 package org.devtcg.robotrc.robotdata.bridge
 
-import org.devtcg.robotrc.robotdata.api.RobotApi
-import org.devtcg.robotrc.robotview.bridge.DeviceWidgetRegistryBridge
+import org.devtcg.robotrc.robotdata.api.RobotModelApi
 
 object RobotApiBridge {
-  private val robots = HashMap<String, RobotApi>()
+  private val robots = HashMap<String, RobotModelApi>()
 
   private val apiFactory = RobotApiFactory()
 
-  val currentSelection: RobotApi?
+  val currentSelection: RobotModelApi?
   get() {
     val robotHost = RobotSelectorBridge.instance.value ?: return null
     return robots.getOrPut(robotHost.host) {

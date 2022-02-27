@@ -1,7 +1,6 @@
-package org.devtcg.robotrc.robotview.ui.viewmodel
+package org.devtcg.robotrc.robotview.ui
 
 import androidx.lifecycle.ViewModel
-import org.devtcg.robotrc.robotdata.api.RobotApi
 import org.devtcg.robotrc.robotdata.bridge.RobotApiBridge
 
 class RobotDataViewModel: ViewModel() {

@@ -9,8 +9,8 @@ import org.devtcg.robotrc.networkservice.model.Device
 import org.devtcg.robotrc.networkservice.network.RemoteControlService
 import org.devtcg.robotrc.robotdata.api.AttributeSpec
 import org.devtcg.robotrc.robotdata.api.DeviceModelApi
-import org.devtcg.robotrc.robotdata.model.RobotTarget
-import org.devtcg.robotrc.robotlayout.api.*
+import org.devtcg.robotrc.robotdata.model.*
+import org.devtcg.robotrc.robotselection.model.RobotTarget
 import java.io.IOException
 import java.util.concurrent.Future
 import java.util.concurrent.ScheduledExecutorService
@@ -163,6 +163,7 @@ class DeviceDataFetcher(
       }
     }
 
+    Log.d(TAG, "Updated ${fetchedAttributes.values.size} attributes!")
     relevantAttributesDestination.postValue(fetchedAttributes)
   }
 
