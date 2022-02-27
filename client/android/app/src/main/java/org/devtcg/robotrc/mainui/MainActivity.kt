@@ -3,7 +3,7 @@ package org.devtcg.robotrc.mainui
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import org.devtcg.robotrc.databinding.ActivityFullscreenBinding
-import org.devtcg.robotrc.robot.bridge.RobotSelectorBridge
+import org.devtcg.robotrc.robotdata.bridge.RobotSelectorBridge
 
 /**
  * An example full-screen activity that shows and hides the system UI (i.e.

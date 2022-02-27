@@ -1,0 +1,11 @@
+package org.devtcg.robotrc.robotdata.api
+
+import org.devtcg.robotrc.robotlayout.api.ReadWriteSpec
+
+data class AttributeSpec(
+  val name: String,
+  val updateFrequencyMs: Long = 1000,
+  val readwrite: ReadWriteSpec = ReadWriteSpec.READ,
+  val isArray: Boolean = false,
+  val optional: Boolean = false,
+)

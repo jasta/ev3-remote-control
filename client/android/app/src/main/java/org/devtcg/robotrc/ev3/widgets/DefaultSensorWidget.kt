@@ -3,40 +3,30 @@ package org.devtcg.robotrc.ev3.widgets
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.lifecycle.LifecycleOwner
-import org.devtcg.robotrc.databinding.Ev3UnknownDeviceBinding
-import org.devtcg.robotrc.devicewidget.api.*
+import org.devtcg.robotrc.databinding.Ev3DefaultSensorBinding
+import org.devtcg.robotrc.robotdata.api.AttributeSpec
+import org.devtcg.robotrc.robotlayout.api.DeviceAttributesSnapshot
+import org.devtcg.robotrc.robotdata.api.DeviceModelApi
 
 class DefaultSensorWidget: DeviceWidget {
-  object Spec {
-    val instance = DeviceWidgetSpec(
-      hardwarePlatform = "ev3",
-      type = "sensor",
-      driver = null,
-      attributes = listOf(
-        AttributeSpec("mode"),
-        AttributeSpec("value0"),
-      )
-    )
-  }
+  private lateinit var binding: Ev3DefaultSensorBinding
 
-  private lateinit var binding: Ev3UnknownDeviceBinding
-
-  override fun onCreate(
-    inflater: LayoutInflater,
-    parent: ViewGroup?,
-    modelApi: DeviceModelApi
-  ): View {
-    binding = Ev3UnknownDeviceBinding.inflate(inflater, parent, true)
-    modelApi.attributesSnapshot.observe(inflater.context as LifecycleOwner) {
-      updateFromSnapshot(it)
-    }
-    return binding.root
-  }
-
-  private fun updateFromSnapshot(snapshot: DeviceAttributesSnapshot) {
+  override fun onBindView(view: View, snapshot: DeviceAttributesSnapshot) {
     val mode = snapshot.attributeValues["mode"]
     val value0 = snapshot.attributeValues["value0"]
     binding.root.text = "Mode: $mode\nValue0: $value0"
+  }
+
+  override fun onCreateView(
+    inflater: LayoutInflater,
+    parent: ViewGroup?,
+    model: DeviceModelApi
+  ): View {
+    binding = Ev3DefaultSensorBinding.inflate(inflater, parent, true)
+    model.updateAttributeSpec(listOf(
+      AttributeSpec("mode"),
+      AttributeSpec("value0"),
+    ))
+    return binding.root
   }
 }
