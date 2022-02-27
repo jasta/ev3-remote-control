@@ -88,33 +88,41 @@
 //!
 //! Response type: Device
 //!
-//! ## GET /device/<address>/attribute
+//! ## GET /device/<address>/attributes
 //!
 //! Read all attribute values
 //!
 //! Response Type: array of AttributeValue
 //!
-//! ## PUT /device/<address>/attribute
+//! ## PUT /device/<address>/attributes
 //!
 //! Write multiple attribute values
 //!
 //! Request Type: array of AttributeValue
 //!
-//! ## GET /device/<address>/attribute/<attribute>
+//! ## GET /device/<address>/attributes/<attribute>
 //!
 //! Read a specific attribute value.
 //!
 //! Response Type: AttributeValue
+//!
+//! ## GET /device/<address>/attributes/<attribute1>,<attribute2>,...
+//!
+//! Read a set of attribute values.
+//!
+//! Response Type: array of AttributeValue
 
 use std::borrow::Borrow;
+use std::collections::HashSet;
 use std::error::Error;
 use std::net::SocketAddr;
 use std::ops::Deref;
 use std::slice::Iter;
 use anyhow::anyhow;
 
-use coap_lite::{CoapRequest, ContentFormat, MessageClass, RequestType, ResponseType};
+use coap_lite::{CoapOption, CoapRequest, ContentFormat, MessageClass, RequestType, ResponseType};
 use coap_lite::link_format::{LINK_ATTR_CONTENT_FORMAT, LINK_ATTR_RESOURCE_TYPE, LinkAttributeWrite};
+use coap_lite::option_value::OptionValueString;
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -243,10 +251,18 @@ impl SingleDeviceResource {
       None => {
         serde_json::to_string(&Device::from_hal(device)?)?
       },
-      Some(path) if path == "attribute" => {
+      Some(path) if path == "attributes" => {
         match path_iter.next() {
           None => {
             let values: Result<Vec<_>, _> = device.get_applicable_attributes()?.into_iter()
+                .map(|a| AttributeValue::from_hal(&device, &a))
+                .collect();
+            serde_json::to_string(&values?)?
+          },
+          Some(attributes) if attributes.contains(',') => {
+            let attributes_vec: HashSet<_> = attributes.split(',').collect();
+            let values: Result<Vec<_>, _> = device.get_applicable_attributes()?.into_iter()
+                .filter(|a| attributes_vec.contains(&a.name.as_str()))
                 .map(|a| AttributeValue::from_hal(&device, &a))
                 .collect();
             serde_json::to_string(&values?)?
@@ -257,7 +273,7 @@ impl SingleDeviceResource {
                 .ok_or_else(HandlingError::not_found)?;
             let value = AttributeValue::from_hal(&device, &attribute)?;
             serde_json::to_string(&value)?
-          },
+          }
         }
       },
       _ => Err(HandlingError::method_not_supported())?,
@@ -277,7 +293,7 @@ impl SingleDeviceResource {
   ) -> anyhow::Result<()> {
     let mut path_iter = remaining_path.iter();
     match path_iter.next() {
-      Some(path) if path == "attribute" => {
+      Some(path) if path == "attributes" => {
         let payload_str = String::from_utf8(request.message.payload.clone())?;
         let values = serde_json::from_str::<Vec<AttributeValue>>(&payload_str)?;
 
