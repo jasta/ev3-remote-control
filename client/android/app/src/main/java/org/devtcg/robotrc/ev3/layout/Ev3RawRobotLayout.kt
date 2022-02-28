@@ -49,7 +49,12 @@ class Ev3RawRobotLayout: RobotLayout {
       return
     }
     val targetWidgetClass = when (model.intrinsics.type) {
-      DeviceType.SENSOR -> DefaultSensorWidget::class.java
+      DeviceType.SENSOR -> {
+        when (model.intrinsics.driver) {
+          "lego-ev3-ir" -> ProximitySensorWidget::class.java
+          else -> DefaultSensorWidget::class.java
+        }
+      }
       DeviceType.ACTUATOR -> LegoMotorWidget::class.java
     }
     if (viewHolder.widget?.javaClass != targetWidgetClass) {

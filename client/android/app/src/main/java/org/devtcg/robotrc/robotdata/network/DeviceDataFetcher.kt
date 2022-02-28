@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.annotation.GuardedBy
 import androidx.lifecycle.MutableLiveData
 import org.devtcg.robotrc.networkservice.model.Attribute
+import org.devtcg.robotrc.networkservice.model.AttributeValue
 import org.devtcg.robotrc.networkservice.model.Device
 import org.devtcg.robotrc.networkservice.network.RemoteControlService
 import org.devtcg.robotrc.robotdata.api.AttributeSpec
@@ -186,9 +187,9 @@ class DeviceDataFetcher(
   }
 
   @Synchronized
-  fun refreshNow() {
+  fun refreshAttributesNow() {
     check(started)
-    fetchingExecutor.submit(::refreshDeviceList)
+    fetchingExecutor.submit(::refreshAttributeValues)
   }
 
   data class RelevantAttribute(
@@ -209,8 +210,18 @@ class DeviceDataFetcher(
       updateRelevantAttributesFromSpec(device, spec)
     }
 
-    override fun sendAttributeWrite(key: String, value: AttributeValueLocal) {
-      TODO()
+    override fun sendAttributeWrites(writes: Map<String, AttributeValueLocal>) {
+      fetchingExecutor.submit {
+        val attributes = writes.map { (key, value) ->
+          AttributeValue(key, value.coerceToString())
+        }
+        try {
+          service.putAttributes(device.address, attributes)
+          refreshAttributesNow()
+        } catch (e: IOException) {
+          Log.e(TAG, "Error writing to ${device.address} with $attributes: $e")
+        }
+      }
     }
   }
 }

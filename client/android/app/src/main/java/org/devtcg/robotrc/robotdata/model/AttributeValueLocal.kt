@@ -4,6 +4,8 @@ data class AttributeValueLocal(
   val type: String,
   val valueAsString: String,
 ) {
+  fun coerceToString() = valueAsString
+
   fun asNumber(): Number {
     try {
       return when {

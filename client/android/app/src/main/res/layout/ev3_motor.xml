@@ -1,8 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
-<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:gravity="center_horizontal"
+    android:orientation="vertical"
     android:paddingTop="20dp"
-    android:paddingBottom="20dp"
-    />
+    android:paddingBottom="20dp">
+
+    <Button
+        android:id="@+id/motor_reset"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="5dp"
+        android:text="Reset" />
+
+    <TextView
+        android:id="@+id/motor_state"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal" />
+
+    <com.google.android.material.slider.Slider
+        android:id="@+id/motor_duty_cycle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:valueFrom="-100.0"
+        android:valueTo="100.0"
+        app:labelBehavior="gone" />
+
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <Button
+            android:id="@+id/duty_down"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="&lt;" />
+
+        <Button
+            android:id="@+id/duty_up"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="&gt;" />
+
+    </LinearLayout>
+
+</LinearLayout>
