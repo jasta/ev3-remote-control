@@ -152,7 +152,7 @@ class DeviceDataFetcher(
         val values = valuesFromPeer.associate {
           val value = AttributeValueLocal(
             device.attributes.find { attr -> attr.name == it.name }!!.type_name,
-            it.value.toString()
+            anyTypeFixupHack(it.value).toString()
           )
           it.name to value
         }
@@ -165,6 +165,24 @@ class DeviceDataFetcher(
 
     Log.d(TAG, "Updated ${fetchedAttributes.values.size} attributes!")
     relevantAttributesDestination.postValue(fetchedAttributes)
+  }
+
+  /**
+   * Moshi by default treats all JSON numbers as doubles, which confuses our parser downstream for
+   * good reason.  Let's try to fit them into more accurate types.
+   */
+  private fun anyTypeFixupHack(value: Any): Any {
+    return when (value) {
+      is Double -> {
+        val asLong = value.toLong()
+        if (asLong.toDouble() == value) {
+          asLong
+        } else {
+          value
+        }
+      }
+      else -> value
+    }
   }
 
   @Synchronized

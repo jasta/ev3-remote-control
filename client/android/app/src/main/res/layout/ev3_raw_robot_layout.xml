@@ -1,91 +1,138 @@
 <?xml version="1.0" encoding="utf-8"?>
-<HorizontalScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:layout_height="match_parent">
 
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:layout_width="wrap_content"
-        android:layout_height="match_parent">
+    <!-- TODO: Rewrite this _awful_ layout, I am not that familiar with ConstraintLayout and it
+         shows. -->
 
-        <FrameLayout
-            android:id="@+id/outA"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:minWidth="100dp"
-            app:layout_constraintLeft_toRightOf="parent"
-            app:layout_constraintTop_toBottomOf="parent" />
+    <androidx.constraintlayout.helper.widget.Flow
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:constraint_referenced_ids="outA_label, outB_label, outC_label, outD_label, outA, outB, outC, outD, in1, in2, in3, in4, in1_label, in2_label, in3_label, in4_label"
+        app:flow_maxElementsWrap="4"
+        app:flow_wrapMode="aligned"
+        app:flow_horizontalStyle="packed"
+        />
 
-        <FrameLayout
-            android:id="@+id/outB"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:minWidth="100dp"
-            app:layout_constraintLeft_toRightOf="@+id/outA"
-            app:layout_constraintTop_toBottomOf="parent" />
+    <TextView
+        android:id="@+id/outA_label"
+        android:layout_width="100dp"
+        android:layout_height="wrap_content"
+        android:text="A"
+        android:gravity="center_horizontal"
+        android:textAppearance="@style/TextAppearance.AppCompat.Display1"
+        />
 
-        <FrameLayout
-            android:id="@+id/outC"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:minWidth="100dp"
-            app:layout_constraintLeft_toRightOf="@+id/outB"
-            app:layout_constraintTop_toBottomOf="parent"
-            />
+    <TextView
+        android:id="@+id/outB_label"
+        android:layout_width="100dp"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:text="B"
+        android:textAppearance="@style/TextAppearance.AppCompat.Display1"
+        />
 
-        <FrameLayout
-            android:id="@+id/outD"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:minWidth="100dp"
-            app:layout_constraintLeft_toRightOf="@+id/outC"
-            app:layout_constraintRight_toLeftOf="parent"
-            app:layout_constraintTop_toBottomOf="parent"
-            />
+    <TextView
+        android:id="@+id/outC_label"
+        android:layout_width="100dp"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:text="C"
+        android:textAppearance="@style/TextAppearance.AppCompat.Display1"
+        />
 
-        <FrameLayout
-            android:id="@+id/in1"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:minWidth="100dp"
-            app:layout_constraintLeft_toRightOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/outA"
-            app:layout_constraintBottom_toTopOf="parent"
-            />
+    <TextView
+        android:id="@+id/outD_label"
+        android:layout_width="100dp"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:text="D"
+        android:textAppearance="@style/TextAppearance.AppCompat.Display1"
+        />
 
-        <FrameLayout
-            android:id="@+id/in2"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:minWidth="100dp"
-            app:layout_constraintLeft_toRightOf="@+id/in1"
-            app:layout_constraintTop_toBottomOf="@+id/outB"
-            app:layout_constraintBottom_toTopOf="parent"
-            />
+    <FrameLayout
+        android:id="@+id/outA"
+        android:layout_width="100dp"
+        android:layout_height="350dp"
+        />
 
-        <FrameLayout
-            android:id="@+id/in3"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:minWidth="100dp"
-            app:layout_constraintLeft_toRightOf="@+id/in2"
-            app:layout_constraintTop_toBottomOf="@+id/outC"
-            app:layout_constraintBottom_toTopOf="parent"
-            />
+    <FrameLayout
+        android:id="@+id/outB"
+        android:layout_width="100dp"
+        android:layout_height="350dp"
+        />
 
-        <FrameLayout
-            android:id="@+id/in4"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:minWidth="100dp"
-            app:layout_constraintLeft_toRightOf="@+id/in3"
-            app:layout_constraintTop_toBottomOf="@+id/outD"
-            app:layout_constraintBottom_toTopOf="parent"
-            app:layout_constraintRight_toLeftOf="parent"
-            />
+    <FrameLayout
+        android:id="@+id/outC"
+        android:layout_width="100dp"
+        android:layout_height="350dp"
+        />
 
-    </androidx.constraintlayout.widget.ConstraintLayout>
+    <FrameLayout
+        android:id="@+id/outD"
+        android:layout_width="100dp"
+        android:layout_height="350dp"
+        />
 
-</HorizontalScrollView>
+    <FrameLayout
+        android:id="@+id/in1"
+        android:layout_width="100dp"
+        android:layout_height="350dp"
+        />
+
+    <FrameLayout
+        android:id="@+id/in2"
+        android:layout_width="100dp"
+        android:layout_height="350dp"
+        />
+    <FrameLayout
+        android:id="@+id/in3"
+        android:layout_width="100dp"
+        android:layout_height="350dp"
+        />
+    <FrameLayout
+        android:id="@+id/in4"
+        android:layout_width="100dp"
+        android:layout_height="350dp"
+        />
+
+    <TextView
+        android:id="@+id/in1_label"
+        android:layout_width="100dp"
+        android:layout_height="wrap_content"
+        android:text="1"
+        android:gravity="center_horizontal"
+        android:textAppearance="@style/TextAppearance.AppCompat.Display1"
+        />
+    <TextView
+        android:id="@+id/in2_label"
+        android:layout_width="100dp"
+        android:layout_height="wrap_content"
+        android:text="2"
+        android:gravity="center_horizontal"
+        android:textAppearance="@style/TextAppearance.AppCompat.Display1"
+        />
+    <TextView
+        android:id="@+id/in3_label"
+        android:layout_width="100dp"
+        android:layout_height="wrap_content"
+        android:text="3"
+        android:gravity="center_horizontal"
+        android:textAppearance="@style/TextAppearance.AppCompat.Display1"
+        />
+    <TextView
+        android:id="@+id/in4_label"
+        android:layout_width="100dp"
+        android:layout_height="wrap_content"
+        android:text="4"
+        android:gravity="center_horizontal"
+        android:textAppearance="@style/TextAppearance.AppCompat.Display1"
+        />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
