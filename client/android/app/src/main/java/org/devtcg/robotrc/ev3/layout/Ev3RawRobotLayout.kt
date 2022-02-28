@@ -17,36 +17,45 @@ class Ev3RawRobotLayout: RobotLayout {
 
   private lateinit var rootBinding: Ev3RawRobotLayoutBinding
 
-  private val deviceBindings = mutableMapOf<String, DeviceViewHolder>()
+  private val deviceViewHolders = mutableMapOf<String, DeviceViewHolder>()
 
   override fun onDevicesUpdated(devices: List<DeviceModelApi>) {
-    for (model in devices) {
-      val binding = deviceBindings[model.intrinsics.address]
-      if (binding == null) {
-        Log.w(TAG, "Unsupported device address: ${model.intrinsics.address}")
-        continue
-      }
+    val devicesCopy = devices.toMutableList()
 
-      createOrRemoveWidgetAsNecessary(model, binding)
+    for ((deviceAddress, holder) in deviceViewHolders) {
+      val actualDevice = devices.find { it.intrinsics.address == deviceAddress }
+      if (actualDevice != null) {
+        devicesCopy.remove(actualDevice)
+      }
+      createOrRemoveWidgetAsNecessary(actualDevice, holder)
+    }
+
+    for (unmatchedDevice in devicesCopy) {
+      Log.w(TAG, "Unsupported device address: ${unmatchedDevice.intrinsics.address}")
     }
   }
 
   override fun onAttributesUpdated(allAttributes: Map<String, DeviceAttributesSnapshot>) {
     for ((deviceAddress, attributes) in allAttributes) {
-      deviceBindings[deviceAddress]?.let { holder ->
+      deviceViewHolders[deviceAddress]?.let { holder ->
         holder.widget?.onBindView(holder.view!!, attributes)
       }
     }
   }
 
-  private fun createOrRemoveWidgetAsNecessary(model: DeviceModelApi, viewHolder: DeviceViewHolder) {
+  private fun createOrRemoveWidgetAsNecessary(model: DeviceModelApi?, viewHolder: DeviceViewHolder) {
+    if (model == null) {
+      viewHolder.clearBinding()
+      return
+    }
     val targetWidgetClass = when (model.intrinsics.type) {
       DeviceType.SENSOR -> DefaultSensorWidget::class.java
-      else -> null
+      DeviceType.ACTUATOR -> LegoMotorWidget::class.java
     }
-    if (viewHolder.widget != targetWidgetClass) {
+    if (viewHolder.widget?.javaClass != targetWidgetClass) {
       val context = rootBinding.root.context
 
+      viewHolder.model?.updateAttributeSpec(emptyList())
       viewHolder.clearBinding()
 
       if (targetWidgetClass == null) {
@@ -77,7 +86,7 @@ class Ev3RawRobotLayout: RobotLayout {
   }
 
   private fun initBinding(address: String, parent: ViewGroup) {
-    deviceBindings[address] = DeviceViewHolder(address, parent)
+    deviceViewHolders[address] = DeviceViewHolder(address, parent)
   }
 
   private inner class DeviceViewHolder(

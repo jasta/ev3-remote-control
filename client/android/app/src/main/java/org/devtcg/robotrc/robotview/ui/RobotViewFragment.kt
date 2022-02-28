@@ -21,5 +21,15 @@ class RobotViewFragment: Fragment() {
   override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
     layoutAgent.onViewCreated()
   }
+
+  override fun onPause() {
+    super.onPause()
+    layoutAgent.onPause()
+  }
+
+  override fun onResume() {
+    super.onResume()
+    layoutAgent.onResume()
+  }
 }
 

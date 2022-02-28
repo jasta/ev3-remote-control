@@ -27,4 +27,12 @@ class RobotLayoutAgent(private val activity: FragmentActivity) {
       layout.onAttributesUpdated(it)
     }
   }
+
+  fun onPause() {
+    viewModel.robotApi.deviceDataFetcher.ensureStopped()
+  }
+
+  fun onResume() {
+    viewModel.robotApi.deviceDataFetcher.ensureStarted()
+  }
 }
