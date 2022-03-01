@@ -7,6 +7,8 @@ import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import com.google.android.material.color.MaterialColors
+import org.devtcg.robotrc.R
 import kotlin.math.max
 import kotlin.math.min
 
@@ -23,7 +25,7 @@ class VerticalSlider @JvmOverloads constructor(
   }
 
   private val thumbPaint = Paint().apply {
-    color = 0xff96ff96.toInt()
+    color = MaterialColors.getColor(this@VerticalSlider, R.attr.colorPrimaryDark)
     flags = Paint.ANTI_ALIAS_FLAG
   }
 
