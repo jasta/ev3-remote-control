@@ -7,6 +7,7 @@ import org.devtcg.robotrc.robotdata.model.DeviceAttributesSnapshot
 import org.devtcg.robotrc.robotdata.api.DeviceModelApi
 
 interface DeviceWidget {
+  val driverLabel: String
   fun onDeviceModelUpdated(model: DeviceModelApi)
   fun onBindView(view: View, snapshot: DeviceAttributesSnapshot)
   fun onCreateView(inflater: LayoutInflater, parent: ViewGroup?): View

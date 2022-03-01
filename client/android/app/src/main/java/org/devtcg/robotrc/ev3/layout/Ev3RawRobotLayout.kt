@@ -4,6 +4,8 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
+import org.devtcg.robotrc.databinding.Ev3PortBinding
 import org.devtcg.robotrc.databinding.Ev3RawRobotLayoutBinding
 import org.devtcg.robotrc.robotdata.model.DeviceAttributesSnapshot
 import org.devtcg.robotrc.robotdata.api.DeviceModelApi
@@ -22,10 +24,15 @@ class Ev3RawRobotLayout: RobotLayout {
   override fun onDevicesUpdated(devices: List<DeviceModelApi>) {
     val devicesCopy = devices.toMutableList()
 
-    for ((deviceAddress, holder) in deviceViewHolders) {
+    for (deviceAddress in rootBinding.ev3RawRobotParent.getKnownAddresses()) {
       val actualDevice = devices.find { it.intrinsics.address == deviceAddress }
       if (actualDevice != null) {
         devicesCopy.remove(actualDevice)
+      }
+      val holder = deviceViewHolders.getOrPut(deviceAddress) {
+        DeviceViewHolder(
+          deviceAddress,
+          rootBinding.ev3RawRobotParent.getPortBinding(deviceAddress)!!)
       }
       createOrRemoveWidgetAsNecessary(actualDevice, holder)
     }
@@ -48,6 +55,7 @@ class Ev3RawRobotLayout: RobotLayout {
       viewHolder.clearBinding()
       return
     }
+
     val targetWidgetClass = when (model.intrinsics.type) {
       DeviceType.SENSOR -> {
         when (model.intrinsics.driver) {
@@ -68,7 +76,7 @@ class Ev3RawRobotLayout: RobotLayout {
         return
       } else {
         val widget = targetWidgetClass.newInstance()
-        val view = widget.onCreateView(LayoutInflater.from(context), viewHolder.parent)
+        val view = widget.onCreateView(LayoutInflater.from(context), viewHolder.portBinding.portView)
         widget.onDeviceModelUpdated(model)
         viewHolder.assignBinding(model, widget, view)
       }
@@ -77,39 +85,28 @@ class Ev3RawRobotLayout: RobotLayout {
 
   override fun onCreateView(inflater: LayoutInflater, parent: ViewGroup?): View {
     rootBinding = Ev3RawRobotLayoutBinding.inflate(inflater, parent, false)
-
-    initBinding("ev3-ports:outA", rootBinding.outA)
-    initBinding("ev3-ports:outB", rootBinding.outB)
-    initBinding("ev3-ports:outC", rootBinding.outC)
-    initBinding("ev3-ports:outD", rootBinding.outD)
-    initBinding("ev3-ports:in1", rootBinding.in1)
-    initBinding("ev3-ports:in2", rootBinding.in2)
-    initBinding("ev3-ports:in3", rootBinding.in3)
-    initBinding("ev3-ports:in4", rootBinding.in4)
-
     return rootBinding.root
-  }
-
-  private fun initBinding(address: String, parent: ViewGroup) {
-    deviceViewHolders[address] = DeviceViewHolder(address, parent)
   }
 
   private inner class DeviceViewHolder(
     val address: String,
-    val parent: ViewGroup,
+    val portBinding: Ev3PortBinding,
     var model: DeviceModelApi? = null,
     var widget: DeviceWidget? = null,
     var view: View? = null,
   ) {
     fun clearBinding() {
-      parent.removeAllViews()
+      portBinding.portView.removeAllViews()
+      portBinding.driverName.text = ""
       model = null
       widget = null
       view = null
     }
 
     fun assignBinding(model: DeviceModelApi, widget: DeviceWidget, view: View) {
-      parent.addView(view)
+      portBinding.driverName.text = widget.driverLabel
+      portBinding.portView.removeAllViews()
+      portBinding.portView.addView(view)
       this.model = model
       this.widget = widget
       this.view = view

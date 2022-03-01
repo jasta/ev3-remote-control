@@ -16,6 +16,8 @@ class LegoMotorWidget: DeviceWidget {
 
   private lateinit var model: DeviceModelApi
 
+  override val driverLabel = "motor"
+
   override fun onDeviceModelUpdated(model: DeviceModelApi) {
     model.updateAttributeSpec(listOf(
       AttributeSpec("position"),

@@ -1,12 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.slider.Slider
+<LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:id="@+id/proximity_slider"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:rotation="270"
-    android:valueFrom="0.0"
-    android:valueTo="100.0"
-    app:labelBehavior="gone"
-    />
+    android:orientation="vertical">
+
+    <org.devtcg.robotrc.robotview.view.VerticalSlider
+        android:id="@+id/proximity_slider"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
+        />
+
+    <TextView
+        android:id="@+id/proximity_value"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:textAppearance="@style/TextAppearance.Material3.HeadlineMedium"
+        />
+
+</LinearLayout>

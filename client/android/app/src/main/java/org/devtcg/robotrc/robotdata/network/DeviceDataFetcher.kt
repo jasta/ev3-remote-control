@@ -82,7 +82,7 @@ class DeviceDataFetcher(
       deviceListFuture!!.cancel(false)
       deviceListFuture = null
     } finally {
-      relevantUpdateFuture!!.cancel(false)
+      relevantUpdateFuture?.cancel(false)
       relevantUpdateFuture = null
     }
   }
