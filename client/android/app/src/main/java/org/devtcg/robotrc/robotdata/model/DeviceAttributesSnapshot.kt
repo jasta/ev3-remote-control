@@ -36,4 +36,7 @@ data class DeviceAttributesSnapshot(
     }
     return null
   }
+
+  fun lookupRemote(attributeName: String) = receivedValues[attributeName]
+  fun lookupLocal(attributeName: String) = optimisticValues[attributeName]
 }

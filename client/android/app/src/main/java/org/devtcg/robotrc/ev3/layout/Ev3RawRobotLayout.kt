@@ -61,6 +61,7 @@ class Ev3RawRobotLayout: RobotLayout {
         when (model.intrinsics.driver) {
           "lego-ev3-ir" -> ProximitySensorWidget::class.java
           "lego-ev3-touch" -> TouchSensorWidget::class.java
+          "lego-ev3-color" -> ColorSensorWidget::class.java
           else -> DefaultSensorWidget::class.java
         }
       }

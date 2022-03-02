@@ -28,4 +28,11 @@ data class AttributeValueLocal(
       else -> throw AttributeValueException(toString())
     }
   }
+
+  fun asStringList(): List<String> {
+    return when (type) {
+      "[string]" -> valueAsString.split(' ')
+      else -> throw AttributeValueException(toString())
+    }
+  }
 }

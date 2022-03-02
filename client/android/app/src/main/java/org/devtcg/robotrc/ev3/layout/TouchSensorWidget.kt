@@ -21,7 +21,6 @@ class TouchSensorWidget: DeviceWidget {
 
   override fun onBindView(view: View, snapshot: DeviceAttributesSnapshot) {
     val value0 = snapshot.lookupLocalOrRemote("value0")?.asNumber()
-    println("value0=$value0")
     binding.touchPressed.isChecked = (value0?.toInt() == 1)
   }
 

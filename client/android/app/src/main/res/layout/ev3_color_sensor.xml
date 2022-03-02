@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Cheap hack to get a border around the color view. -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_margin="20dp"
+        android:background="@android:color/darker_gray">
+
+        <View
+            android:id="@+id/color_reading"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_margin="1dp"
+            />
+
+    </FrameLayout>
+
+    <Button
+        android:id="@+id/color_mode_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+        android:autoSizeTextType="uniform"
+        android:autoSizeMinTextSize="6sp"
+        android:autoSizeMaxTextSize="24sp"
+        android:autoSizeStepGranularity="2sp"
+        android:maxLines="1"
+        />
+
+</LinearLayout>

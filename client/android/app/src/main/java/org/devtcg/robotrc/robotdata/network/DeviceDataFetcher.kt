@@ -283,6 +283,12 @@ class DeviceDataFetcher(
           value
         }
       }
+      is List<*> -> {
+        value.joinToString(separator = " ")
+      }
+      is Array<*> -> {
+        value.joinToString(separator = " ")
+      }
       else -> value
     }
   }

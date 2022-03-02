@@ -10,14 +10,17 @@ import org.devtcg.robotrc.robotdata.api.DeviceModelApi
 
 class DefaultSensorWidget: DeviceWidget {
   private lateinit var binding: Ev3DefaultSensorBinding
+  private lateinit var model: DeviceModelApi
 
-  override val driverLabel = "unknown"
+  override val driverLabel
+  get() = model.intrinsics.driver
 
   override fun onDeviceModelUpdated(model: DeviceModelApi) {
     model.updateAttributeSpec(listOf(
       AttributeSpec("mode"),
       AttributeSpec("value0"),
     ))
+    this.model = model
   }
 
   override fun onBindView(view: View, snapshot: DeviceAttributesSnapshot) {
