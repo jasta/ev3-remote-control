@@ -87,27 +87,12 @@ class VerticalSlider @JvmOverloads constructor(
   var valueTo: Float = 100F
   private set
 
-  var value: Float = 0F
+  private var _value: Float = 0F
+  var value
+  get() = _value
   set(providedValue) {
-    if (isTouchDown) {
-      Log.w(TAG, "Ignoring programmatic value while user touch is down: value=$providedValue")
-      return
-    }
-    val clampedValue = clampValue(providedValue)
-    if (clampedValue != providedValue) {
-      Log.d(TAG, "Clamping $providedValue to $clampedValue...")
-    }
-    val oldValue = field
-    field = clampedValue
-    if (clampedValue != oldValue) {
-      for (listener in listeners) {
-        listener.onSliderValueChanged(this, clampedValue)
-      }
-    }
-    invalidate()
+    setValueInternal(providedValue, fromUser = false)
   }
-
-  fun clampValue(value: Float) = max(min(value, valueTo), valueFrom)
 
   fun addChangeListener(listener: OnChangeListener) {
     listeners.add(listener)
@@ -144,29 +129,50 @@ class VerticalSlider @JvmOverloads constructor(
     }
     return when (event.action) {
       MotionEvent.ACTION_UP -> {
-        if (!sticky) {
-          value = valueNeutral
-        }
         isTouchDown = false
+        if (!sticky) {
+          setValueInternal(valueNeutral, fromUser = true)
+        }
         true
       }
       MotionEvent.ACTION_MOVE, MotionEvent.ACTION_DOWN -> {
-        val topBottomPadding = paddingTop + paddingBottom
-        val relativePosition = clamp((event.y - topBottomPadding) / height, 0F, 1F)
-
-        val newValue = (relativePosition * (valueTo - valueFrom)) - valueFrom
-        value = newValue
         isTouchDown = true
+        val usableHeight = (height - (paddingTop + paddingBottom)).toFloat()
+        val clampedY = clamp(event.y, paddingTop.toFloat(), (height - paddingBottom).toFloat())
+        val invertedProportion = 1F - ((clampedY - paddingTop) / usableHeight)
+        val newValue = valueFrom + (invertedProportion * (valueTo - valueFrom))
+        setValueInternal(newValue, fromUser = true)
         true
       }
       else -> false
     }
   }
 
+  private fun setValueInternal(providedValue: Float, fromUser: Boolean) {
+    if (!fromUser && isTouchDown) {
+      Log.w(TAG, "Ignoring programmatic value while user touch is down: value=$providedValue")
+      return
+    }
+    val clampedValue = clampValue(providedValue)
+    if (clampedValue != providedValue) {
+      Log.d(TAG, "Clamping $providedValue to $clampedValue...")
+    }
+    val oldValue = _value
+    _value = clampedValue
+    if (clampedValue != oldValue) {
+      for (listener in listeners) {
+        listener.onSliderValueChanged(this, clampedValue, fromUser)
+      }
+      invalidate()
+    }
+  }
+
+  fun clampValue(providedValue: Float) = clamp(providedValue, valueFrom, valueTo)
+
   private fun clamp(value: Float, valueMin: Float, valueMax: Float) =
     min(max(value, valueMin), valueMax)
 
   fun interface OnChangeListener {
-    fun onSliderValueChanged(view: VerticalSlider, value: Float)
+    fun onSliderValueChanged(view: VerticalSlider, value: Float, fromUser: Boolean)
   }
 }

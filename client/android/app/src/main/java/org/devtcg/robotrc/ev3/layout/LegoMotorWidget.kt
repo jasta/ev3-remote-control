@@ -81,7 +81,7 @@ class LegoMotorWidget: DeviceWidget {
       it.setValueRange(-100F, 100F, 0F)
       it.touchEnabled = true
       it.sticky = true
-      it.addChangeListener { _, value ->
+      it.addChangeListener { _, value, _ ->
         setRemoteDutyCycle(value.toInt())
       }
     }
