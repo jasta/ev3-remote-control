@@ -25,61 +25,42 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_horizontal"
-        android:layout_marginBottom="10dp"
+        android:layout_marginBottom="-10dp"
         />
 
-    <LinearLayout
-        android:orientation="horizontal"
-        android:layout_width="wrap_content"
+    <TextView
+        android:id="@+id/motor_duty_cycle_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:textAppearance="@style/TextAppearance.Material3.HeadlineMedium"
+        />
+
+    <ImageButton
+        android:id="@+id/duty_up"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="10dp"
+        android:layout_marginRight="10dp"
+        android:src="@drawable/ic_baseline_keyboard_arrow_up"
+        />
+
+    <org.devtcg.robotrc.robotview.view.VerticalSlider
+        android:id="@+id/motor_duty_cycle_slider"
+        android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_gravity="center_horizontal">
+        android:paddingBottom="10dp"
+        android:paddingTop="10dp"
+        />
 
-        <org.devtcg.robotrc.robotview.view.VerticalSlider
-            android:id="@+id/motor_duty_cycle_slider"
-            android:layout_width="40dp"
-            android:layout_height="match_parent"
-            android:paddingBottom="10dp"
-            android:paddingTop="10dp"
-            />
-
-        <LinearLayout
-            android:orientation="vertical"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_vertical">
-
-            <TextView
-                android:id="@+id/motor_duty_cycle_label"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_horizontal"
-                android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
-                android:layout_marginBottom="10dp"
-                android:autoSizeTextType="uniform"
-                android:autoSizeMinTextSize="12sp"
-                android:autoSizeMaxTextSize="32sp"
-                android:autoSizeStepGranularity="2sp"
-                android:maxLines="1"
-                />
-
-            <ImageButton
-                android:id="@+id/duty_up"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:src="@drawable/ic_baseline_keyboard_arrow_up"
-                android:layout_marginBottom="10dp"
-                />
-
-            <ImageButton
-                android:id="@+id/duty_down"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:src="@drawable/ic_baseline_keyboard_arrow_down"
-                />
-
-        </LinearLayout>
-
-    </LinearLayout>
+    <ImageButton
+        android:id="@+id/duty_down"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="10dp"
+        android:layout_marginRight="10dp"
+        android:src="@drawable/ic_baseline_keyboard_arrow_down"
+        />
 
 </LinearLayout>
