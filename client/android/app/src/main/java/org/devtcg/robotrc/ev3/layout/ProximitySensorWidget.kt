@@ -21,8 +21,8 @@ class ProximitySensorWidget: DeviceWidget {
   }
 
   override fun onBindView(view: View, snapshot: DeviceAttributesSnapshot) {
-    val mode = snapshot.attributeValues["mode"]?.asString()
-    val percent = snapshot.attributeValues["value0"]?.asNumber()
+    val mode = snapshot.lookupLocalOrRemote("mode")?.asString()
+    val percent = snapshot.lookupLocalOrRemote("value0")?.asNumber()
     if (mode == "IR-PROX" && percent != null) {
       binding.proximitySlider.value = percent.toFloat()
       binding.proximityValue.text = percent.toInt().toString() + "%"

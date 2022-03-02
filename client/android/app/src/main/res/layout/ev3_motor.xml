@@ -1,52 +1,84 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:orientation="vertical"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     android:paddingTop="20dp"
     android:paddingBottom="20dp">
 
     <Button
         android:id="@+id/motor_reset"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_margin="5dp"
-        android:text="Reset" />
+        android:layout_marginBottom="5dp"
+        android:text="@string/motor_reset"
+        android:maxLines="1"
+        android:autoSizeTextType="uniform"
+        android:autoSizeMinTextSize="8sp"
+        android:autoSizeMaxTextSize="14sp"
+        android:autoSizeStepGranularity="2sp"
+        />
 
     <TextView
-        android:id="@+id/motor_state"
+        android:id="@+id/motor_position"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_horizontal" />
-
-    <com.google.android.material.slider.Slider
-        android:id="@+id/motor_duty_cycle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:valueFrom="-100.0"
-        android:valueTo="100.0"
-        app:labelBehavior="gone" />
+        android:gravity="center_horizontal"
+        android:layout_marginBottom="10dp"
+        />
 
     <LinearLayout
         android:orientation="horizontal"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_width="wrap_content"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_gravity="center_horizontal">
 
-        <Button
-            android:id="@+id/duty_down"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="wrap_content"
-            android:text="&lt;" />
+        <org.devtcg.robotrc.robotview.view.VerticalSlider
+            android:id="@+id/motor_duty_cycle_slider"
+            android:layout_width="40dp"
+            android:layout_height="match_parent"
+            android:paddingBottom="10dp"
+            android:paddingTop="10dp"
+            />
 
-        <Button
-            android:id="@+id/duty_up"
-            android:layout_width="0dp"
-            android:layout_weight="1"
+        <LinearLayout
+            android:orientation="vertical"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="&gt;" />
+            android:layout_gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/motor_duty_cycle_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_horizontal"
+                android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
+                android:layout_marginBottom="10dp"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="12sp"
+                android:autoSizeMaxTextSize="32sp"
+                android:autoSizeStepGranularity="2sp"
+                android:maxLines="1"
+                />
+
+            <ImageButton
+                android:id="@+id/duty_up"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:src="@drawable/ic_baseline_keyboard_arrow_up"
+                android:layout_marginBottom="10dp"
+                />
+
+            <ImageButton
+                android:id="@+id/duty_down"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:src="@drawable/ic_baseline_keyboard_arrow_down"
+                />
+
+        </LinearLayout>
 
     </LinearLayout>
 

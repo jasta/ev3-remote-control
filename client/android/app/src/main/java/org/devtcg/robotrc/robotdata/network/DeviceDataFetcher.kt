@@ -28,6 +28,12 @@ class DeviceDataFetcher(
     private const val TAG = "DeviceFetcher"
 
     private const val DEVICE_LIST_UPDATE_FREQUENCY_MS: Long = 10_000
+
+    /**
+     * Debugging feature to arbitrarily force a write delay to the remote peer to verify that
+     * optimistic writes are working smoothly even when the network is very slow.
+     */
+    private const val FORCE_WRITE_DELAY_MS: Long = 0
   }
 
   @GuardedBy("this")
@@ -40,7 +46,25 @@ class DeviceDataFetcher(
   private var relevantUpdateFuture: Future<*>? = null
 
   @GuardedBy("this")
-  private var relevantAttributesByDevice = HashMap<Device, List<RelevantAttribute>>()
+  private var pendingWritesFuture: Future<*>? = null
+
+  @GuardedBy("this")
+  private var localDeviceStates = HashMap<Device, LocalDeviceState>()
+
+  private data class LocalDeviceState(
+    var recentFetch: Map<String, AttributeValueLocal> = mapOf(),
+
+    /**
+     * Writes that we're attempting to transact with the peer.  These values will be presumed to be
+     * the values at the remote site optimistically until we can confirm otherwise.
+     */
+    val optimisticWrites: MutableMap<String, AttributeValueLocal> = mutableMapOf(),
+
+    /**
+     * Attributes we're currently refreshing (can be changed by user interactions)
+     */
+    val relevantAttributes: MutableList<RelevantAttribute> = mutableListOf(),
+  )
 
   @Synchronized
   fun ensureStarted() {
@@ -87,6 +111,64 @@ class DeviceDataFetcher(
     }
   }
 
+  @Synchronized
+  private fun applyPendingWrites(device: Device, writes: Map<String, AttributeValueLocal>) {
+    val state = localDeviceState(device)
+    state.optimisticWrites.putAll(writes)
+
+    // Post the new optimistic values so the UI can update right away...
+    val snapshots = localDeviceStates.entries.associate {
+      it.key.address to createSnapshotLocked(it.value)
+    }
+    relevantAttributesDestination.postValue(snapshots)
+
+    pendingWritesFuture?.cancel(false)
+    pendingWritesFuture = fetchingExecutor.schedule({
+      performAttributeWrites(device)
+    }, FORCE_WRITE_DELAY_MS, TimeUnit.MILLISECONDS)
+  }
+
+  @Synchronized
+  private fun createSnapshotLocked(state: LocalDeviceState): DeviceAttributesSnapshot {
+    return DeviceAttributesSnapshot(
+      state.recentFetch,
+      state.optimisticWrites.toMap(),
+      SystemClock.elapsedRealtime())
+  }
+
+  private fun performAttributeWrites(device: Device) {
+    // Only use the most recent values, not the ones provided to each call.  This means if we
+    // stack writes for the same attribute we'll save some network latency and drop the previous
+    // values automatically.
+    val state = localDeviceState(device)
+    if (state.optimisticWrites.isEmpty()) {
+      Log.d(TAG, "Dropping extraneous pending write, already achieved desired result")
+      return
+    }
+    val attributes = state.optimisticWrites.map { (key, value) ->
+      AttributeValue(key, value.coerceToString())
+    }
+    try {
+      service.putAttributes(device.address, attributes)
+      refreshAttributeValues()
+    } catch (e: IOException) {
+      Log.e(TAG, "Error writing to ${device.address} with $attributes: $e")
+    } finally {
+      // Values are removed even if there is an error as we want to reflect that these pending
+      // writes can no longer be seen as valid by the client and the server's values will
+      // snap back as the authority.
+      synchronized(this) {
+        for ((key, value) in state.optimisticWrites) {
+          // Note that we remove by value too so that we ensure the most recent pending write
+          // we sent is the one that actually clears the pending state.  It's possible new values
+          // came in while we were stuck in `putAttributes`, and those values need to be applied
+          // next time this method is invoked.
+          state.optimisticWrites.remove(key, value)
+        }
+      }
+    }
+  }
+
   private fun refreshDeviceList() {
     Log.i(TAG, "Refreshing device list for $target...")
     try {
@@ -129,16 +211,24 @@ class DeviceDataFetcher(
 
   @Synchronized
   private fun updateRelevantAttributesForDevice(device: Device, attributes: List<RelevantAttribute>) {
-    relevantAttributesByDevice[device] = attributes
+    val stateAttributes = localDeviceState(device).relevantAttributes
+    stateAttributes.clear()
+    stateAttributes.addAll(attributes)
 
-    val updateFrequencyMs = relevantAttributesByDevice.values.flatten().minOf { it.updateFrequencyMs }
+    // TODO: We can technically do better and have multiple scheduled futures in flight.  Might not
+    // be worth it though as the msot efficient solution is to actually use the observe feature
+    // in CoAP and only receive updates on change from the server.
+    val lowestUpdateFrequencyMs = localDeviceStates.values
+      .map { it.relevantAttributes }
+      .flatten()
+      .minOf { it.updateFrequencyMs }
 
     if (started) {
       relevantUpdateFuture?.cancel(false)
       relevantUpdateFuture = fetchingExecutor.scheduleAtFixedRate(
         ::refreshAttributeValues,
         0 /* initialDelay */,
-        updateFrequencyMs,
+        lowestUpdateFrequencyMs,
         TimeUnit.MILLISECONDS)
     }
   }
@@ -147,25 +237,34 @@ class DeviceDataFetcher(
     Log.i(TAG, "Refreshing attribute values for $target...")
 
     val fetchedAttributes = mutableMapOf<String, DeviceAttributesSnapshot>()
-    for ((device, attributes) in relevantAttributesByDevice.entries) {
+    val deviceStatesCopy = synchronized(this) {
+      localDeviceStates.toMap()
+    }.entries
+    for ((device, state) in deviceStatesCopy) {
+      val attributes = state.relevantAttributes
       try {
         val valuesFromPeer = service.getAttributes(device.address, attributes.map { it.attributeName })
-        val values = valuesFromPeer.associate {
+        val receivedValues = valuesFromPeer.associate {
           val value = AttributeValueLocal(
             device.attributes.find { attr -> attr.name == it.name }!!.type_name,
-            anyTypeFixupHack(it.value).toString()
+            anyTypeFixupHack(it.value).toString(),
+            AttributeValueSource.REMOTE_READ
           )
           it.name to value
         }
-        fetchedAttributes[device.address] =
-          DeviceAttributesSnapshot(values, SystemClock.elapsedRealtime())
+        synchronized (this) {
+          state.recentFetch = receivedValues
+          fetchedAttributes[device.address] = createSnapshotLocked(state)
+        }
       } catch (e: IOException) {
         Log.e(TAG, "Error refreshing ${device.address}: $e, moving on...")
       }
     }
 
-    Log.d(TAG, "Updated ${fetchedAttributes.values.size} attributes!")
-    relevantAttributesDestination.postValue(fetchedAttributes)
+    synchronized(this) {
+      Log.d(TAG, "Updated ${fetchedAttributes.values.size} attributes!")
+      relevantAttributesDestination.postValue(fetchedAttributes)
+    }
   }
 
   /**
@@ -187,16 +286,20 @@ class DeviceDataFetcher(
   }
 
   @Synchronized
-  fun refreshAttributesNow() {
+  fun scheduleRefreshAttributeValues() {
     check(started)
     fetchingExecutor.submit(::refreshAttributeValues)
   }
 
-  data class RelevantAttribute(
+  private fun localDeviceState(device: Device): LocalDeviceState {
+    return localDeviceStates.getOrPut(device) { LocalDeviceState() }
+  }
+
+  private data class RelevantAttribute(
     val attributeName: String,
     val updateFrequencyMs: Long)
 
-  inner class DeviceModelApiImpl(private val device: Device) : DeviceModelApi {
+  private inner class DeviceModelApiImpl(private val device: Device) : DeviceModelApi {
     override val intrinsics = DeviceIntrinsics(
       when (device.type_name) {
         "sensor" -> DeviceType.SENSOR
@@ -211,17 +314,10 @@ class DeviceDataFetcher(
     }
 
     override fun sendAttributeWrites(writes: Map<String, AttributeValueLocal>) {
-      fetchingExecutor.submit {
-        val attributes = writes.map { (key, value) ->
-          AttributeValue(key, value.coerceToString())
-        }
-        try {
-          service.putAttributes(device.address, attributes)
-          refreshAttributesNow()
-        } catch (e: IOException) {
-          Log.e(TAG, "Error writing to ${device.address} with $attributes: $e")
-        }
+      writes.entries.find { it.value.source != AttributeValueSource.LOCAL_WRITE }?.let {
+        throw IllegalArgumentException("sending non-local write for: ${it.key}")
       }
+      applyPendingWrites(device, writes)
     }
   }
 }

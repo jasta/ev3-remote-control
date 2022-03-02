@@ -21,8 +21,8 @@ class DefaultSensorWidget: DeviceWidget {
   }
 
   override fun onBindView(view: View, snapshot: DeviceAttributesSnapshot) {
-    val mode = snapshot.attributeValues["mode"]?.asString()
-    val value0 = snapshot.attributeValues["value0"]?.asNumber()
+    val mode = snapshot.lookupLocalOrRemote("mode")?.asString()
+    val value0 = snapshot.lookupLocalOrRemote("value0")?.asNumber()
     binding.root.text = "Mode: $mode\nValue0: $value0"
   }
 

@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Robot Remote Control</string>
+    <string name="motor_reset">Reset</string>
 </resources>

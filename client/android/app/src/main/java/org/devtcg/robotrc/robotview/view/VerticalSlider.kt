@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.util.AttributeSet
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import com.google.android.material.color.MaterialColors
@@ -15,6 +16,10 @@ import kotlin.math.min
 class VerticalSlider @JvmOverloads constructor(
   context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
+  companion object {
+    private const val TAG = "VerticalSlider"
+  }
+
   private val sliderBarWidth = 2 * resources.displayMetrics.density
   private val thumbWidth = 20 * resources.displayMetrics.density
 
@@ -25,7 +30,7 @@ class VerticalSlider @JvmOverloads constructor(
   }
 
   private val thumbPaint = Paint().apply {
-    color = MaterialColors.getColor(this@VerticalSlider, R.attr.colorPrimaryDark)
+    color = MaterialColors.getColor(this@VerticalSlider, R.attr.colorPrimary)
     flags = Paint.ANTI_ALIAS_FLAG
   }
 
@@ -51,8 +56,13 @@ class VerticalSlider @JvmOverloads constructor(
   var touchEnabled: Boolean = true
   set(newTouchEnabled) {
     field = newTouchEnabled
+    if (!newTouchEnabled) {
+      isTouchDown = false
+    }
     invalidate()
   }
+
+  private var isTouchDown = false
 
   fun setValueRange(valueFrom: Float, valueTo: Float, valueNeutral: Float) {
     check(valueFrom <= valueTo)
@@ -78,16 +88,26 @@ class VerticalSlider @JvmOverloads constructor(
   private set
 
   var value: Float = 0F
-  set(newValue) {
+  set(providedValue) {
+    if (isTouchDown) {
+      Log.w(TAG, "Ignoring programmatic value while user touch is down: value=$providedValue")
+      return
+    }
+    val clampedValue = clampValue(providedValue)
+    if (clampedValue != providedValue) {
+      Log.d(TAG, "Clamping $providedValue to $clampedValue...")
+    }
     val oldValue = field
-    field = newValue
-    if (newValue != oldValue) {
+    field = clampedValue
+    if (clampedValue != oldValue) {
       for (listener in listeners) {
-        listener.onSliderValueChanged(this, newValue)
+        listener.onSliderValueChanged(this, clampedValue)
       }
     }
     invalidate()
   }
+
+  fun clampValue(value: Float) = max(min(value, valueTo), valueFrom)
 
   fun addChangeListener(listener: OnChangeListener) {
     listeners.add(listener)
@@ -99,7 +119,6 @@ class VerticalSlider @JvmOverloads constructor(
 
   override fun onDraw(canvas: Canvas) {
     val halfWidth = width / 2F
-    val halfSliderBarWidth = sliderBarWidth / 2F
     val halfThumbWidth = thumbWidth / 2F
     val topBottomPadding = paddingTop + paddingBottom
 
@@ -111,10 +130,10 @@ class VerticalSlider @JvmOverloads constructor(
       sliderPaint)
 
     val valueAsProportion = (value - valueFrom) / (valueTo - valueFrom)
-
+    val heightLessPadding = height - topBottomPadding
     canvas.drawCircle(
       halfWidth,
-      valueAsProportion * (height - topBottomPadding) + paddingTop,
+      height - paddingBottom - (valueAsProportion * heightLessPadding),
       halfThumbWidth,
       thumbPaint)
   }
@@ -128,6 +147,7 @@ class VerticalSlider @JvmOverloads constructor(
         if (!sticky) {
           value = valueNeutral
         }
+        isTouchDown = false
         true
       }
       MotionEvent.ACTION_MOVE, MotionEvent.ACTION_DOWN -> {
@@ -136,6 +156,7 @@ class VerticalSlider @JvmOverloads constructor(
 
         val newValue = (relativePosition * (valueTo - valueFrom)) - valueFrom
         value = newValue
+        isTouchDown = true
         true
       }
       else -> false
@@ -145,7 +166,7 @@ class VerticalSlider @JvmOverloads constructor(
   private fun clamp(value: Float, valueMin: Float, valueMax: Float) =
     min(max(value, valueMin), valueMax)
 
-  interface OnChangeListener {
+  fun interface OnChangeListener {
     fun onSliderValueChanged(view: VerticalSlider, value: Float)
   }
 }

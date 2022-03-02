@@ -3,6 +3,7 @@ package org.devtcg.robotrc.robotdata.model
 data class AttributeValueLocal(
   val type: String,
   val valueAsString: String,
+  val source: AttributeValueSource = AttributeValueSource.LOCAL_WRITE,
 ) {
   fun coerceToString() = valueAsString
 
