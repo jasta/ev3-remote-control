@@ -128,7 +128,7 @@ class VerticalSlider @JvmOverloads constructor(
       return false
     }
     return when (event.action) {
-      MotionEvent.ACTION_UP -> {
+      MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
         isTouchDown = false
         if (!sticky) {
           setValueInternal(valueNeutral, fromUser = true)
