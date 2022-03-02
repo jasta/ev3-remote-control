@@ -224,6 +224,8 @@ class DeviceDataFetcher(
       .minOf { it.updateFrequencyMs }
 
     if (started) {
+      Log.i(TAG, "Scheduling refresh attributes every $lowestUpdateFrequencyMs ms...")
+
       relevantUpdateFuture?.cancel(false)
       relevantUpdateFuture = fetchingExecutor.scheduleAtFixedRate(
         ::refreshAttributeValues,

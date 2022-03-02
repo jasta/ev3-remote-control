@@ -27,8 +27,14 @@ class RemoteControlService(
   fun getAttributes(address: String) =
     execGet<List<Attribute>>("device/$address/attributes")
 
-  fun getAttributes(address: String, names: List<String>) =
-    execGet<List<AttributeValue>>("device/$address/attributes/" + names.joinToString(separator = ",")) ?: throw noNull()
+  fun getAttributes(address: String, names: List<String>): List<AttributeValue> {
+    return if (names.size == 1) {
+      listOf(getAttribute(address, names[0]) ?: throw noNull())
+    } else {
+      execGet<List<AttributeValue>>("device/$address/attributes/" + names.joinToString(separator = ","))
+        ?: throw noNull()
+    }
+  }
 
   fun getAttribute(address: String, name: String) =
     execGet<AttributeValue>("device/$address/attributes/$name")

@@ -14,6 +14,7 @@
         <entry key="app/src/main/res/layout/ev3_port.xml" value="0.20923913043478262" />
         <entry key="app/src/main/res/layout/ev3_proximity_sensor.xml" value="0.20923913043478262" />
         <entry key="app/src/main/res/layout/ev3_raw_robot_layout.xml" value="0.22" />
+        <entry key="app/src/main/res/layout/ev3_touch_sensor.xml" value="0.20923913043478262" />
         <entry key="app/src/main/res/layout/ev3_unknown_device.xml" value="0.20923913043478262" />
         <entry key="app/src/main/res/layout/main_activity.xml" value="0.32653985507246375" />
         <entry key="app/src/main/res/layout/robot_view_fragment.xml" value="0.20923913043478262" />

@@ -60,6 +60,7 @@ class Ev3RawRobotLayout: RobotLayout {
       DeviceType.SENSOR -> {
         when (model.intrinsics.driver) {
           "lego-ev3-ir" -> ProximitySensorWidget::class.java
+          "lego-ev3-touch" -> TouchSensorWidget::class.java
           else -> DefaultSensorWidget::class.java
         }
       }
