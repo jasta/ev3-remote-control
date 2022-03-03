@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 use std::collections::{HashMap, LinkedList};
 use std::io;
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::Parser;
@@ -66,6 +66,7 @@ fn run_server_forever(addr: (String, u16)) {
         .build();
 
     let mut server = Server::new(addr).unwrap();
+    server.join_multicast(IpAddr::V4(Ipv4Addr::new(224, 0, 1, 187)));
     println!("Server up on {:?}", server.socket_addr().unwrap());
 
     server.run(|request| async {
