@@ -308,7 +308,7 @@ mod tests {
     let mut request = CoapRequest::new();
     let ref mut message = request.message;
     let ref mut header = message.header;
-    request.set_path("/.well_known/core");
+    request.set_path("/.well-known/core");
     request.response = CoapResponse::new(&Packet::new());
 
     let actual = handler.handle(request);
