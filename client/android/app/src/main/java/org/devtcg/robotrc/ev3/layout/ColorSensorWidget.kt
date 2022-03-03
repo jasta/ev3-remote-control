@@ -74,7 +74,6 @@ class ColorSensorWidget: DeviceWidget {
   }
 
   private fun applyColorReading(mode: String?, values: List<Number?>) {
-    println("mode=$mode, values=$values")
     val colorToShow = when (mode) {
       "COL-REFLECT" -> Color.valueOf(1F, 1F, 1F, values.first()?.toFloat() ?: 0F)
       "COL-AMBIENT" -> Color.valueOf(1F, 1F, 1F, values.first()?.toFloat() ?: 0F)

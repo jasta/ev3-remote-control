@@ -8,7 +8,6 @@ import org.devtcg.robotrc.networkservice.model.Device
 import org.eclipse.californium.core.CoapClient
 import org.eclipse.californium.core.coap.CoAP
 import org.eclipse.californium.core.coap.MediaTypeRegistry
-import org.w3c.dom.Attr
 import java.io.IOException
 
 class RemoteControlService(
