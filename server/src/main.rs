@@ -52,7 +52,7 @@ fn main() {
 }
 
 fn determine_bind_address(opts: Opts) -> (String, u16) {
-  let address = opts.address.unwrap_or("0.0.0.0".to_owned());
+  let address = opts.address.unwrap_or_else(|| "0.0.0.0".to_owned());
   let port = opts.port.unwrap_or(5683);
   (address, port)
 }
