@@ -8,7 +8,8 @@ use std::string::FromUtf8Error;
 use std::sync::{Arc, Mutex};
 
 use coap_lite::link_format::*;
-use coap_lite::{CoapRequest, CoapResponse, ContentFormat, MessageClass, ResponseType};
+use coap_lite::{CoapOption, CoapRequest, CoapResponse, ContentFormat, MessageClass, ResponseType};
+use coap_lite::option_value::OptionValueString;
 use log::info;
 use log::Level::*;
 use crate::block_handler::{BlockHandler, BlockHandlerConfig};
@@ -104,6 +105,7 @@ impl CoapResourceNode {
 
 pub struct CoapResourceServerBuilder {
   core_discovery: bool,
+  suppress_empty_core_reply: bool,
   resources: Vec<CoapResourceNode>,
 }
 
@@ -111,8 +113,14 @@ impl CoapResourceServerBuilder {
   pub fn new() -> Self {
     Self {
       core_discovery: true,
+      suppress_empty_core_reply: true,
       resources: Vec::new()
     }
+  }
+
+  pub fn set_suppress_empty_core_reply(mut self, suppress: bool) -> Self {
+    self.suppress_empty_core_reply = suppress;
+    self
   }
 
   pub fn set_core_discovery(mut self, is_enabled: bool) -> Self {
@@ -140,7 +148,10 @@ impl CoapResourceServerBuilder {
 
     if self.core_discovery {
       let core_node = CoapResourceNode::from_resource(
-          Box::new(CoreCoapResource { resources: full_path_mapping.clone() }));
+          Box::new(CoreCoapResource {
+            suppress_empty_response: self.suppress_empty_core_reply,
+            resources: full_path_mapping.clone()
+          }));
       full_path_mapping.insert(core_node.full_path, Arc::from(core_node.resource));
     }
 
@@ -176,14 +187,22 @@ impl CoapResourceServer {
       None => Err(HandlingError::not_found()),
     };
 
-    if let Err(err) = final_result {
-      Self::apply_response_from_error(&mut request, err);
+    let desired_response = match final_result {
+      Ok(_) => request.response,
+      Err(err) => {
+        let response_issued = Self::apply_response_from_error(&mut request, err);
 
-      // If the error happens to need block2 handling, let's do that here...
-      let _result = self.block_handler.lock().unwrap().intercept_response(&mut request);
-    }
+        // If the error happens to need block2 handling, let's do that here...
+        if response_issued {
+          let _result = self.block_handler.lock().unwrap().intercept_response(&mut request);
+          request.response
+        } else {
+          None
+        }
+      }
+    };
 
-    request.response
+    desired_response
   }
 
   fn find_most_specific_handler(&self, path: &[String]) -> Option<(usize, Arc<CoapResourceType>)> {
@@ -213,18 +232,22 @@ impl CoapResourceServer {
   fn apply_response_from_error(
       request: &mut CoapRequest<SocketAddr>,
       error: HandlingError
-  ) {
+  ) -> bool {
     if let Some(reply) = &mut request.response {
-      let message = &mut reply.message;
-      message.header.code = MessageClass::Response(
-        error.code.unwrap_or(ResponseType::InternalServerError));
-      message.set_content_format(ContentFormat::TextPlain);
-      message.payload = error.message.into_bytes();
+      if let Some(code) = error.code {
+        let message = &mut reply.message;
+        message.header.code = MessageClass::Response(code);
+        message.set_content_format(ContentFormat::TextPlain);
+        message.payload = error.message.into_bytes();
+        return true;
+      }
     }
+    false
   }
 }
 
 struct CoreCoapResource {
+  suppress_empty_response: bool,
   resources: HashMap<Vec<String>, Arc<CoapResourceType>>
 }
 
@@ -246,12 +269,39 @@ impl CoapResource for CoreCoapResource {
   }
 
   fn handle(&self, request: &mut CoapRequest<SocketAddr>, _remaining_path: &[String]) -> Result<(), HandlingError> {
+    let queries = coap_utils::request_get_queries(request);
     let mut reply = request.response.as_mut().ok_or(HandlingError::not_handled())?;
+
+    let all_resources = Self::format_links(&self.resources);
+    let final_reply = if !queries.is_empty() {
+      // This inefficiency (formatting all, then parsing+filtering, then formatting again) is
+      // an unfortunate side effect of our write_attributes API.  In hindsight, this should be a structured
+      // map that's returned and then formatted on demand.  Oh well :\
+      let matched_resources = self.filter_by_query(all_resources, queries)
+          .map_err(|e| HandlingError::internal(format!("{:?}", e)))?;
+      Self::format_links(&matched_resources)
+    } else {
+      all_resources
+    };
+
+    if final_reply.is_empty() && self.suppress_empty_response {
+      // This is crucial for multicast as we should not reply to multicast filter requests
+      // that we didn't match.
+      return Err(HandlingError::not_handled());
+    }
+
+    reply.message.set_content_format(ContentFormat::ApplicationLinkFormat);
+    reply.message.payload = final_reply.into_bytes();
+    Ok(())
+  }
+}
+
+impl CoreCoapResource {
+  fn format_links(resources: &HashMap<Vec<String>, Arc<CoapResourceType>>) -> String {
     let mut buffer = String::new();
     let mut write = LinkFormatWrite::new(&mut buffer);
 
-    let x: &HashMap<Vec<String>, Arc<CoapResourceType>> = self.resources.borrow();
-    for (path, resource) in x {
+    for (path, resource) in resources {
       let full_path = "/".to_owned() + &path.join("/");
       let mut attr = write.link(full_path.as_str());
       attr = resource.write_attributes(attr);
@@ -260,9 +310,42 @@ impl CoapResource for CoreCoapResource {
       }
     }
 
-    reply.message.set_content_format(ContentFormat::ApplicationLinkFormat);
-    reply.message.payload = buffer.into_bytes();
-    Ok(())
+    buffer
+  }
+
+  fn filter_by_query(&self, all_links: String, queries: HashMap<String, String>) -> Result<HashMap<Vec<String>, Arc<CoapResourceType>>, ErrorLinkFormat> {
+    let mut matches = HashMap::<Vec<String>, Arc<CoapResourceType>>::new();
+
+    let parsed = LinkFormatParser::new(&all_links)
+        .collect::<Result<Vec<_>, _>>()?;
+    for (path, attributes) in parsed {
+      let attrs_map: HashMap<_, _> = attributes
+          .map(|(key, value)| {
+            (key.to_string(), value.to_cow().to_string())
+          })
+          .collect();
+      if Self::is_query_match(&attrs_map, &queries) {
+        let path_vec: Vec<String> = path
+            .split('/')
+            .filter(|x| !x.is_empty())
+            .map(|x| x.to_owned())
+            .collect();
+        let resource = self.resources[&path_vec].clone();
+        matches.insert(path_vec, resource);
+      }
+    }
+
+    Ok(matches)
+  }
+
+  fn is_query_match(attributes: &HashMap<String, String>, queries: &HashMap<String, String>) -> bool {
+    for (required_key, required_value) in queries {
+      match attributes.get(required_key) {
+        Some(attribute_value) if attribute_value == required_value => {},
+        _ => return false,
+      }
+    }
+    true
   }
 }
 
