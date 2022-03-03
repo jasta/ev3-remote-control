@@ -105,7 +105,6 @@ impl CoapResourceNode {
 
 pub struct CoapResourceServerBuilder {
   core_discovery: bool,
-  suppress_empty_core_reply: bool,
   resources: Vec<CoapResourceNode>,
 }
 
@@ -113,14 +112,8 @@ impl CoapResourceServerBuilder {
   pub fn new() -> Self {
     Self {
       core_discovery: true,
-      suppress_empty_core_reply: true,
       resources: Vec::new()
     }
-  }
-
-  pub fn set_suppress_empty_core_reply(mut self, suppress: bool) -> Self {
-    self.suppress_empty_core_reply = suppress;
-    self
   }
 
   pub fn set_core_discovery(mut self, is_enabled: bool) -> Self {
@@ -149,7 +142,6 @@ impl CoapResourceServerBuilder {
     if self.core_discovery {
       let core_node = CoapResourceNode::from_resource(
           Box::new(CoreCoapResource {
-            suppress_empty_response: self.suppress_empty_core_reply,
             resources: full_path_mapping.clone()
           }));
       full_path_mapping.insert(core_node.full_path, Arc::from(core_node.resource));
@@ -247,7 +239,6 @@ impl CoapResourceServer {
 }
 
 struct CoreCoapResource {
-  suppress_empty_response: bool,
   resources: HashMap<Vec<String>, Arc<CoapResourceType>>
 }
 
@@ -283,12 +274,6 @@ impl CoapResource for CoreCoapResource {
     } else {
       all_resources
     };
-
-    if final_reply.is_empty() && self.suppress_empty_response {
-      // This is crucial for multicast as we should not reply to multicast filter requests
-      // that we didn't match.
-      return Err(HandlingError::not_handled());
-    }
 
     reply.message.set_content_format(ContentFormat::ApplicationLinkFormat);
     reply.message.payload = final_reply.into_bytes();
