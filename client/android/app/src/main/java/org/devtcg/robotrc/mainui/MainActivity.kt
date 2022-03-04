@@ -11,8 +11,8 @@ import org.devtcg.robotrc.robotdata.bridge.RobotSelectorBridge
  */
 class MainActivity : AppCompatActivity() {
   private lateinit var binding: MainActivityBinding
-  private val robotSelectionDeciderAgent =
-    MainUiDeciderAgent(
+  private val robotSelectionAgent =
+    RobotSelectionAgent(
       supportFragmentManager,
       RobotSelectorBridge.instance)
 
@@ -21,7 +21,8 @@ class MainActivity : AppCompatActivity() {
 
     binding = MainActivityBinding.inflate(layoutInflater)
     setContentView(binding.root)
+    setSupportActionBar(binding.toolbar)
 
-    robotSelectionDeciderAgent.onCreate()
+    robotSelectionAgent.onCreate()
   }
 }

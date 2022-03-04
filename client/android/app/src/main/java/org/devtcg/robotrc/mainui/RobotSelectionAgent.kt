@@ -8,11 +8,13 @@ import org.devtcg.robotrc.robotselection.model.RobotTarget
 import org.devtcg.robotrc.robotview.ui.RobotViewFragment
 import org.devtcg.robotrc.robotselection.ui.RobotSelectionFragment
 
-class MainUiDeciderAgent(
+class RobotSelectionAgent(
   private val fragmentManager: FragmentManager,
   private val robotSelector: LiveData<RobotTarget>
 ) {
   fun onCreate() {
+    robotSelector.observe()
+
     fragmentManager.commit {
       if (robotSelector.value != null) {
         replace(R.id.main_container, RobotViewFragment::class.java, null, "robot-view")

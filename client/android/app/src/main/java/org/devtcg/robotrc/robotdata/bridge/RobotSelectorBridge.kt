@@ -5,5 +5,5 @@ import org.devtcg.robotrc.robotselection.model.RobotTarget
 
 object RobotSelectorBridge {
   // TODO: Don't hardcode the selection :P
-  val instance = MutableLiveData(RobotTarget("ev3dev", "ev3"))
+  val instance = MutableLiveData(RobotTarget("ev3dev", "ev3dev"))
 }

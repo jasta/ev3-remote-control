@@ -13,9 +13,7 @@ class RobotLayoutAgent(private val activity: FragmentActivity) {
   private val layout = Ev3RawRobotLayout()
 
   fun onCreateView(inflater: LayoutInflater, container: ViewGroup?): View {
-    check (viewModel.robotApi.target.hardwarePlatform == "ev3") {
-      "Only ev3 platform is supported for now!"
-    }
+    // TODO: Eventually we want to support other hardware "layouts" for controls
     return layout.onCreateView(inflater, container)
   }
 
