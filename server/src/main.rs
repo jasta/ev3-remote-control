@@ -1,8 +1,10 @@
 use std::borrow::Borrow;
 use std::collections::{HashMap, LinkedList};
+use std::future::Future;
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs};
 use std::time::{SystemTime, UNIX_EPOCH};
+use anyhow::anyhow;
 
 use clap::Parser;
 use clap::Subcommand;
@@ -11,6 +13,7 @@ use coap_lite::{CoapRequest, CoapResponse};
 use multimap::MultiMap;
 use querystring::QueryParams;
 use serde_json::json;
+use tokio::process::Command;
 use tokio::runtime::Runtime;
 
 use time_resource::TimeResource;
@@ -59,18 +62,39 @@ fn determine_bind_address(opts: Opts) -> (String, u16) {
 
 fn run_server_forever(addr: (String, u16)) {
   Runtime::new().unwrap().block_on(async move {
-    let server_handler = CoapResourceServer::builder()
-        .add_resource(Box::new(TimeResource {}))
-        .add_resource(Box::new(DevicesResource {}))
-        .add_resource(Box::new(SingleDeviceResource {}))
-        .build();
+    let mdns_future = run_mdns_advertisement(addr.1);
+    let coap_future = run_coap_server(addr);
 
-    let mut server = Server::new(addr).unwrap();
-    server.join_multicast(IpAddr::V4(Ipv4Addr::new(224, 0, 1, 187)));
-    println!("Server up on {:?}", server.socket_addr().unwrap());
-
-    server.run(|request| async {
-      server_handler.handle(request)
-    }).await.unwrap();
+    tokio::try_join!(mdns_future, coap_future);
   });
+}
+
+async fn run_mdns_advertisement(port: u16) -> anyhow::Result<()> {
+  // TODO: Advertised name should be based on use provided configuration.
+  let mut child = Command::new("avahi-publish-service")
+      .arg("ev3dev")
+      .arg("_coap._udp")
+      .arg("5683")
+      .arg("\"/devices\"")
+      .spawn()?;
+
+  let status = child.wait().await?;
+  Err(anyhow!("Unexpected avahi exit: {:?}", status))
+}
+
+async fn run_coap_server(addr: (String, u16)) -> anyhow::Result<()> {
+  let server_handler = CoapResourceServer::builder()
+      .add_resource(Box::new(TimeResource {}))
+      .add_resource(Box::new(DevicesResource {}))
+      .add_resource(Box::new(SingleDeviceResource {}))
+      .build();
+
+  let mut server = Server::new(addr)?;
+  println!("Server up on {:?}", server.socket_addr()?);
+
+  server.run(|request| async {
+    server_handler.handle(request)
+  }).await?;
+
+  Err(anyhow!("Unexpected CoAP server exit!"))
 }
