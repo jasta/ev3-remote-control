@@ -75,7 +75,7 @@ async fn run_mdns_advertisement(port: u16) -> anyhow::Result<()> {
       .arg("ev3dev")
       .arg("_coap._udp")
       .arg("5683")
-      .arg("\"/devices\"")
+      .arg("rt=\"devices\"")
       .spawn()?;
 
   let status = child.wait().await?;
