@@ -5,7 +5,6 @@
     android:layout_height="match_parent"
     android:orientation="horizontal">
 
-    <!-- Pretty this up a bit and maybe add some info about the type of robot or something? -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/robot_name"
         android:layout_width="0dp"
