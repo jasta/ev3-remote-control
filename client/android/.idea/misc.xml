@@ -20,6 +20,10 @@
         <entry key="app/src/main/res/layout/ev3_touch_sensor.xml" value="0.20923913043478262" />
         <entry key="app/src/main/res/layout/ev3_unknown_device.xml" value="0.20923913043478262" />
         <entry key="app/src/main/res/layout/main_activity.xml" value="0.32653985507246375" />
+        <entry key="app/src/main/res/layout/robot_chooser_fragment.xml" value="0.5" />
+        <entry key="app/src/main/res/layout/robot_chooser_item.xml" value="0.2056159420289855" />
+        <entry key="app/src/main/res/layout/robot_selection_fragment.xml" value="0.2056159420289855" />
+        <entry key="app/src/main/res/layout/robot_selection_item.xml" value="0.2056159420289855" />
         <entry key="app/src/main/res/layout/robot_view_fragment.xml" value="0.20923913043478262" />
       </map>
     </option>

@@ -5,11 +5,9 @@ import org.devtcg.robotrc.concurrency.RobotExecutors
 import org.devtcg.robotrc.networkservice.bridge.RemoteControlServiceFactory
 import org.devtcg.robotrc.robotdata.api.DeviceModelApi
 import org.devtcg.robotrc.robotdata.api.RobotModelApi
-import org.devtcg.robotrc.robotselection.model.RobotTarget
-import org.devtcg.robotrc.robotdata.network.DeviceDataFetcher
 import org.devtcg.robotrc.robotdata.model.DeviceAttributesSnapshot
-import java.util.concurrent.Executors
-import java.util.concurrent.Executors.newSingleThreadScheduledExecutor
+import org.devtcg.robotrc.robotdata.network.DeviceDataFetcher
+import org.devtcg.robotrc.robotselection.model.RobotTarget
 
 internal class RobotApiFactory {
   fun create(target: RobotTarget): RobotModelApi {

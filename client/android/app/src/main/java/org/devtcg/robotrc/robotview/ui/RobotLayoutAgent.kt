@@ -14,6 +14,7 @@ class RobotLayoutAgent(private val activity: FragmentActivity) {
 
   fun onCreateView(inflater: LayoutInflater, container: ViewGroup?): View {
     // TODO: Eventually we want to support other hardware "layouts" for controls
+    check (viewModel.robotApi.target.supportedLayouts.contains("ev3"))
     return layout.onCreateView(inflater, container)
   }
 

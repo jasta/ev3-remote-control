@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import org.devtcg.robotrc.databinding.MainActivityBinding
 import org.devtcg.robotrc.robotdata.bridge.RobotSelectorBridge
+import org.devtcg.robotrc.robotselection.ui.RobotSelectionInitiationAgent
 
 /**
  * An example full-screen activity that shows and hides the system UI (i.e.
@@ -11,10 +12,7 @@ import org.devtcg.robotrc.robotdata.bridge.RobotSelectorBridge
  */
 class MainActivity : AppCompatActivity() {
   private lateinit var binding: MainActivityBinding
-  private val robotSelectionAgent =
-    RobotSelectionAgent(
-      supportFragmentManager,
-      RobotSelectorBridge.instance)
+  private lateinit var robotSelectionAgent: RobotSelectionInitiationAgent
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -22,6 +20,13 @@ class MainActivity : AppCompatActivity() {
     binding = MainActivityBinding.inflate(layoutInflater)
     setContentView(binding.root)
     setSupportActionBar(binding.toolbar)
+    supportActionBar!!.setDisplayShowTitleEnabled(false)
+
+    robotSelectionAgent = RobotSelectionInitiationAgent(
+      this,
+      supportFragmentManager,
+      binding.robotTargetButton,
+      RobotSelectorBridge.instance)
 
     robotSelectionAgent.onCreate()
   }

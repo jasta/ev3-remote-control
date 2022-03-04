@@ -1,4 +1,4 @@
-package org.devtcg.robotrc.networkservice.network
+package org.devtcg.robotrc.robotdata.network
 
 import android.content.Context
 import android.net.nsd.NsdManager
@@ -6,13 +6,15 @@ import android.net.nsd.NsdServiceInfo
 import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.GuardedBy
-import java.util.concurrent.CopyOnWriteArrayList
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 
-class RemoteControlDiscovery(
+class RobotDiscovery(
   context: Context,
   private val discoveryExecutor: ScheduledExecutorService,
+  private val peersDestination: MutableLiveData<List<DiscoveredPeer>>
 ) {
   companion object {
     private const val TAG = "RemoteControlDiscovery"
@@ -29,21 +31,14 @@ class RemoteControlDiscovery(
     context.getSystemService(Context.NSD_SERVICE) as NsdManager
   }
 
+  val peers: LiveData<List<DiscoveredPeer>>
+  get() = peersDestination
+
   @GuardedBy("this")
   private var isDiscovering = false
 
   @GuardedBy("this")
-  private val peersByName = mutableMapOf<String, DiscoveredPeer>()
-
-  private val listeners = CopyOnWriteArrayList<DiscoveryListener>()
-
-  fun addDiscoveryListener(listener: DiscoveryListener) {
-    listeners.add(listener)
-  }
-
-  fun removeDiscoveryListener(listener: DiscoveryListener) {
-    listeners.remove(listener)
-  }
+  private val cachedPeersByName = mutableMapOf<String, DiscoveredPeer>()
 
   @Synchronized
   fun openDiscovery() {
@@ -63,17 +58,15 @@ class RemoteControlDiscovery(
   private fun pruneAndDispatchPeers() {
     val peersList = synchronized (this) {
       prunePeersLocked()
-      peersByName.values.toList()
+      cachedPeersByName.values.toList()
     }
-    for (listener in listeners) {
-      listener.onPeersChanged(peersList)
-    }
+    peersDestination.postValue(peersList)
   }
 
   @GuardedBy("this")
   private fun prunePeersLocked() {
     val now = realtimeNow()
-    val peersIter = peersByName.values.iterator()
+    val peersIter = cachedPeersByName.values.iterator()
     while (peersIter.hasNext()) {
       val peer = peersIter.next()
       val elapsedSinceDiscovery = now - peer.discoveryTimeMs
@@ -130,7 +123,7 @@ class RemoteControlDiscovery(
             Log.d(TAG, "...not a match")
           }
 
-          val peer = peersByName.getOrPut(serviceInfo.serviceName) {
+          val peer = cachedPeersByName.getOrPut(serviceInfo.serviceName) {
             DiscoveredPeer(
               serviceInfo.host?.hostAddress + ":" + serviceInfo.port,
               serviceInfo.serviceName,
@@ -147,7 +140,7 @@ class RemoteControlDiscovery(
 
     override fun onServiceLost(serviceInfo: NsdServiceInfo) {
       Log.i(TAG, "onServiceLost: serviceInfo=$serviceInfo")
-      peersByName[serviceInfo.serviceName]?.lostTimeMs = realtimeNow()
+      cachedPeersByName[serviceInfo.serviceName]?.lostTimeMs = realtimeNow()
 
       pruneAndDispatchPeers()
     }
@@ -162,14 +155,4 @@ class RemoteControlDiscovery(
     return true
   }
 
-  data class DiscoveredPeer(
-    val targetSocketAddr: String,
-    val targetName: String,
-    val textRecords: Map<String, ByteArray>,
-    var discoveryTimeMs: Long = TIME_NOT_SPECIFIED,
-    var lostTimeMs: Long = TIME_NOT_SPECIFIED)
-
-  fun interface DiscoveryListener {
-    fun onPeersChanged(peers: List<DiscoveredPeer>)
-  }
 }
