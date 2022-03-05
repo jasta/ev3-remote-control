@@ -16,6 +16,12 @@ internal class DiscoveredPeerAdapter(
   private val fragment: BottomSheetDialogFragment,
   private val selectionTarget: MutableLiveData<RobotTarget?>,
 ): ListAdapter<DiscoveredPeer, DiscoveredPeerAdapter.RobotViewHolder>(DiscoveredPeerDiffCallback()) {
+  init {
+    selectionTarget.observe(fragment) {
+      notifyDataSetChanged()
+    }
+  }
+
   override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RobotViewHolder {
     val holder = RobotViewHolder(
       RobotChooserItemBinding.inflate(
@@ -25,12 +31,17 @@ internal class DiscoveredPeerAdapter(
     holder.binding.root.setOnClickListener {
       onItemClicked(getItem(holder.bindingAdapterPosition))
     }
+    holder.binding.disconnect.setOnClickListener {
+      onDisconnectClicked(getItem(holder.bindingAdapterPosition))
+    }
     return holder
   }
 
   override fun onBindViewHolder(holder: RobotViewHolder, position: Int) {
     val item = getItem(position)
     holder.binding.robotName.text = item.targetName
+    val isSelected = item.targetName == selectionTarget.value?.displayName
+    holder.binding.disconnect.visibility = if (isSelected) View.VISIBLE else View.INVISIBLE
   }
 
   private fun onItemClicked(item: DiscoveredPeer) {
@@ -40,6 +51,12 @@ internal class DiscoveredPeerAdapter(
       item.targetSocketAddr,
       supportedLayouts = listOf("ev3"))
     fragment.dismiss()
+  }
+
+  private fun onDisconnectClicked(item: DiscoveredPeer) {
+    if (selectionTarget.value?.displayName == item.targetName) {
+      selectionTarget.value = null
+    }
   }
 
   inner class RobotViewHolder(

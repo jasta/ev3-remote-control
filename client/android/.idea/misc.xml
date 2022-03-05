@@ -5,6 +5,7 @@
       <map>
         <entry key="../../../../../../layout/custom_preview.xml" value="0.1953125" />
         <entry key="../../../../../../usr/local/lib/android/platforms/android-31/data/res/layout/simple_spinner_item.xml" value="0.12604166666666666" />
+        <entry key="app/src/main/res/drawable/ic_baseline_close_24.xml" value="0.214" />
         <entry key="app/src/main/res/drawable/ic_baseline_keyboard_arrow_down.xml" value="0.216" />
         <entry key="app/src/main/res/drawable/ic_baseline_keyboard_arrow_down_24.xml" value="0.216" />
         <entry key="app/src/main/res/drawable/ic_baseline_keyboard_arrow_up.xml" value="0.216" />
