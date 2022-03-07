@@ -63,7 +63,7 @@ class Ev3RawRobotViewGroup @JvmOverloads constructor(
     }
   }
 
-  fun getKnownAddresses(): List<String> {
+  fun getPortAddresses(): List<String> {
     return devicePortsByAddress.keys.toList()
   }
 

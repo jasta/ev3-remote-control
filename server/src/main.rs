@@ -34,6 +34,7 @@ mod coap_utils;
 mod hal_mock;
 mod block_handler;
 mod block_value;
+mod layout_resource;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]

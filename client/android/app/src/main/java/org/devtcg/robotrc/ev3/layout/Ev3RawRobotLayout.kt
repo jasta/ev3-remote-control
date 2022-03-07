@@ -4,7 +4,6 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
 import org.devtcg.robotrc.databinding.Ev3PortBinding
 import org.devtcg.robotrc.databinding.Ev3RawRobotLayoutBinding
 import org.devtcg.robotrc.robotdata.model.DeviceAttributesSnapshot
@@ -24,15 +23,15 @@ class Ev3RawRobotLayout: RobotLayout {
   override fun onDevicesUpdated(devices: List<DeviceModelApi>) {
     val devicesCopy = devices.toMutableList()
 
-    for (deviceAddress in rootBinding.ev3RawRobotParent.getKnownAddresses()) {
-      val actualDevice = devices.find { it.intrinsics.address == deviceAddress }
+    for (slotAddress in rootBinding.ev3RawRobotParent.getPortAddresses()) {
+      val actualDevice = devices.find { matchAddress(it.intrinsics.address, slotAddress) }
       if (actualDevice != null) {
         devicesCopy.remove(actualDevice)
       }
-      val holder = deviceViewHolders.getOrPut(deviceAddress) {
+      val holder = deviceViewHolders.getOrPut(slotAddress) {
         DeviceViewHolder(
-          deviceAddress,
-          rootBinding.ev3RawRobotParent.getPortBinding(deviceAddress)!!)
+          slotAddress,
+          rootBinding.ev3RawRobotParent.getPortBinding(slotAddress)!!)
       }
       createOrRemoveWidgetAsNecessary(actualDevice, holder)
     }
@@ -42,9 +41,15 @@ class Ev3RawRobotLayout: RobotLayout {
     }
   }
 
+  private fun matchAddress(remoteAddress: String, localPortAddress: String): Boolean {
+    // We use starts with so we can match the local address slot "ev3-ports:in1" to a remote
+    // generic i2c device like "ev3-ports:in1:i2c12".
+    return remoteAddress.startsWith(localPortAddress)
+  }
+
   override fun onAttributesUpdated(allAttributes: Map<String, DeviceAttributesSnapshot>) {
     for ((deviceAddress, attributes) in allAttributes) {
-      deviceViewHolders[deviceAddress]?.let { holder ->
+      deviceViewHolders.values.find { matchAddress(deviceAddress, it.address) }?.let { holder ->
         holder.widget?.onBindView(holder.view!!, attributes)
       }
     }
