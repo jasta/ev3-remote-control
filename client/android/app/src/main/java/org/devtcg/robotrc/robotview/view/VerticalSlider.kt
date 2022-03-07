@@ -22,6 +22,17 @@ class VerticalSlider @JvmOverloads constructor(
 
   private val sliderBarWidth = 2 * resources.displayMetrics.density
   private val thumbWidth = 20 * resources.displayMetrics.density
+  private val borderWidth = 1 * resources.displayMetrics.density
+
+  private val trackPaddingLeftRight = 30 * resources.displayMetrics.density
+  private val trackPaddingTopBottom = (thumbWidth / 2) + trackPaddingLeftRight
+  private val trackVisualPaddingTopBottom = (thumbWidth / 2) + 6 * resources.displayMetrics.density
+  private val trackWidth = thumbWidth + trackPaddingLeftRight
+
+  init {
+    minimumWidth = trackWidth.toInt()
+    minimumHeight = (100 * resources.displayMetrics.density).toInt()
+  }
 
   private val sliderPaint = Paint().apply {
     color = Color.LTGRAY
@@ -29,14 +40,22 @@ class VerticalSlider @JvmOverloads constructor(
     strokeWidth = sliderBarWidth
   }
 
+  private val trackBorderPaint = Paint().apply {
+    color = MaterialColors.getColor(this@VerticalSlider, R.attr.colorOnPrimary)
+    flags = Paint.ANTI_ALIAS_FLAG
+    strokeWidth = borderWidth
+    style = Paint.Style.STROKE
+  }
+
+  private val trackFillPaint = Paint().apply {
+    color = MaterialColors.getColor(this@VerticalSlider, R.attr.colorSurface)
+    flags = Paint.ANTI_ALIAS_FLAG
+    style = Paint.Style.FILL
+  }
+
   private val thumbPaint = Paint().apply {
     color = MaterialColors.getColor(this@VerticalSlider, R.attr.colorPrimary)
     flags = Paint.ANTI_ALIAS_FLAG
-  }
-
-  init {
-    minimumWidth = (50 * resources.displayMetrics.density).toInt()
-    minimumHeight = (100 * resources.displayMetrics.density).toInt()
   }
 
   private val listeners = mutableListOf<OnChangeListener>()
@@ -48,7 +67,7 @@ class VerticalSlider @JvmOverloads constructor(
   var sticky: Boolean = true
   set(newSticky) {
     field = newSticky
-    if (newSticky) {
+    if (!newSticky) {
       value = valueNeutral
     }
   }
@@ -102,10 +121,35 @@ class VerticalSlider @JvmOverloads constructor(
     listeners.remove(listener)
   }
 
+  override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+    val halfLeftRight = (trackPaddingLeftRight / 2).toInt()
+    val halfTopBottom = (trackPaddingTopBottom / 2).toInt()
+    val clampedLeft = max(paddingLeft, halfLeftRight)
+    val clampedRight = max(paddingRight, halfLeftRight)
+    val clampedTop = max(paddingTop, halfTopBottom)
+    val clampedBottom = max(paddingBottom, halfTopBottom)
+
+    // Harmless call if our clamping didn't change the values.
+    setPadding(clampedLeft, clampedTop, clampedRight, clampedBottom)
+  }
+
   override fun onDraw(canvas: Canvas) {
     val halfWidth = width / 2F
+    val halfTrackWidth = trackWidth / 2
     val halfThumbWidth = thumbWidth / 2F
+    val halfTrackVisualPaddingTopBottom = trackVisualPaddingTopBottom / 2F
     val topBottomPadding = paddingTop + paddingBottom
+    val trackPaddingTop = trackPaddingTopBottom / 2F
+    val trackPaddingBottom = trackPaddingTop
+
+    for (trackPaint in listOf(trackFillPaint, trackBorderPaint)) {
+      canvas.drawRect(
+        halfWidth - halfTrackWidth,
+        halfTrackVisualPaddingTopBottom,
+        halfWidth + halfTrackWidth,
+        height - halfTrackVisualPaddingTopBottom,
+        trackPaint)
+    }
 
     canvas.drawLine(
       halfWidth,
@@ -137,6 +181,9 @@ class VerticalSlider @JvmOverloads constructor(
       }
       MotionEvent.ACTION_MOVE, MotionEvent.ACTION_DOWN -> {
         isTouchDown = true
+        if (event.action == MotionEvent.ACTION_DOWN) {
+          parent.requestDisallowInterceptTouchEvent(true)
+        }
         val usableHeight = (height - (paddingTop + paddingBottom)).toFloat()
         val clampedY = clamp(event.y, paddingTop.toFloat(), (height - paddingBottom).toFloat())
         val invertedProportion = 1F - ((clampedY - paddingTop) / usableHeight)
