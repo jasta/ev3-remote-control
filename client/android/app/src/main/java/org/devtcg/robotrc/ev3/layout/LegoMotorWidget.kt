@@ -74,16 +74,16 @@ class LegoMotorWidget: DeviceWidget {
     parent: ViewGroup?,
   ): View {
     binding = Ev3MotorBinding.inflate(inflater, parent, false)
-    binding.motorReset.setOnClickListener { motorReset() }
-    binding.dutyUp.setOnClickListener { stepDutyCycle(10) }
-    binding.dutyDown.setOnClickListener { stepDutyCycle(-10) }
     binding.motorDutyCycleSlider.also {
       it.setValueRange(-100F, 100F, 0F)
       it.touchEnabled = true
-      it.sticky = true
+      it.sticky = binding.motorSticky.isChecked
       it.addChangeListener { _, value, _ ->
         setRemoteDutyCycle(value.toInt())
       }
+    }
+    binding.motorSticky.setOnCheckedChangeListener { _, isChecked ->
+      binding.motorDutyCycleSlider.sticky = isChecked
     }
     return binding.root
   }

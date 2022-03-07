@@ -3,22 +3,7 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:orientation="vertical"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:paddingTop="20dp"
-    android:paddingBottom="20dp">
-
-    <Button
-        android:id="@+id/motor_reset"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="5dp"
-        android:text="@string/motor_reset"
-        android:maxLines="1"
-        android:autoSizeTextType="uniform"
-        android:autoSizeMinTextSize="8sp"
-        android:autoSizeMaxTextSize="14sp"
-        android:autoSizeStepGranularity="2sp"
-        />
+    android:layout_height="match_parent">
 
     <TextView
         android:id="@+id/motor_position"
@@ -36,15 +21,6 @@
         android:textAppearance="@style/TextAppearance.Material3.HeadlineMedium"
         />
 
-    <ImageButton
-        android:id="@+id/duty_up"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginLeft="10dp"
-        android:layout_marginRight="10dp"
-        android:src="@drawable/ic_baseline_keyboard_arrow_up"
-        />
-
     <org.devtcg.robotrc.robotview.view.VerticalSlider
         android:id="@+id/motor_duty_cycle_slider"
         android:layout_width="match_parent"
@@ -54,13 +30,16 @@
         android:paddingTop="10dp"
         />
 
-    <ImageButton
-        android:id="@+id/duty_down"
+    <com.google.android.material.switchmaterial.SwitchMaterial
+        android:id="@+id/motor_sticky"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginLeft="10dp"
-        android:layout_marginRight="10dp"
-        android:src="@drawable/ic_baseline_keyboard_arrow_down"
+        android:text="@string/motor_sticky"
+        android:autoSizeTextType="uniform"
+        android:autoSizeMinTextSize="8sp"
+        android:autoSizeMaxTextSize="14sp"
+        android:autoSizeStepGranularity="2sp"
+        android:maxLines="1"
         />
 
 </LinearLayout>
