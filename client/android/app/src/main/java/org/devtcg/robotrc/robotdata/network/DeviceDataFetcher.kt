@@ -141,11 +141,14 @@ class DeviceDataFetcher(
     // stack writes for the same attribute we'll save some network latency and drop the previous
     // values automatically.
     val state = localDeviceState(device)
-    if (state.optimisticWrites.isEmpty()) {
-      Log.d(TAG, "Dropping extraneous pending write, already achieved desired result")
-      return
+    val writesLocalCopy = synchronized(this) {
+      if (state.optimisticWrites.isEmpty()) {
+        Log.d(TAG, "Dropping extraneous pending write, already achieved desired result")
+        return
+      }
+      state.optimisticWrites.toMap()
     }
-    val attributes = state.optimisticWrites.map { (key, value) ->
+    val attributes = writesLocalCopy.map { (key, value) ->
       AttributeValue(key, value.coerceToString())
     }
     try {
@@ -158,7 +161,7 @@ class DeviceDataFetcher(
       // writes can no longer be seen as valid by the client and the server's values will
       // snap back as the authority.
       synchronized(this) {
-        for ((key, value) in state.optimisticWrites) {
+        for ((key, value) in writesLocalCopy) {
           // Note that we remove by value too so that we ensure the most recent pending write
           // we sent is the one that actually clears the pending state.  It's possible new values
           // came in while we were stuck in `putAttributes`, and those values need to be applied
