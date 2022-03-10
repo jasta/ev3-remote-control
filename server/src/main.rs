@@ -9,7 +9,6 @@ use crate::device_resource::DevicesResource;
 use crate::device_resource::SingleDeviceResource;
 
 mod coap_resource_server;
-mod uri_query_helper;
 mod device_resource;
 mod hal;
 mod hal_ev3;
