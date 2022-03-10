@@ -4,15 +4,12 @@ use coap::Server;
 use tokio::process::Command;
 use tokio::runtime::Runtime;
 
-use time_resource::TimeResource;
-
 use crate::coap_resource_server::CoapResourceServer;
 use crate::device_resource::DevicesResource;
 use crate::device_resource::SingleDeviceResource;
 
 mod coap_resource_server;
 mod uri_query_helper;
-mod time_resource;
 mod device_resource;
 mod hal;
 mod hal_ev3;
@@ -71,7 +68,6 @@ async fn run_mdns_advertisement(_port: u16) -> anyhow::Result<()> {
 
 async fn run_coap_server(addr: (String, u16)) -> anyhow::Result<()> {
   let server_handler = CoapResourceServer::builder()
-      .add_resource(Box::new(TimeResource {}))
       .add_resource(Box::new(DevicesResource {}))
       .add_resource(Box::new(SingleDeviceResource {}))
       .build();
