@@ -4,10 +4,10 @@
 //! to tolerate mixed use cases.  In-memory caching of request and response bodies is used to
 //! achieve the generic interaction.
 
-use std::cmp::min;
-use std::collections::Bound;
-use std::ops::{Deref, RangeBounds};
-use std::time::Duration;
+use core::cmp::min;
+use core::ops::Bound;
+use core::ops::{Deref, RangeBounds};
+use core::time::Duration;
 
 use anyhow::anyhow;
 use coap_lite::{CoapOption, CoapRequest, MessageClass, Packet, ResponseType};
@@ -227,10 +227,10 @@ impl<Endpoint: Ord + Clone> BlockHandler<Endpoint> {
     }
   }
 
-  /// Intercept a request after it has been handled but before it is to be delivered over the
-  /// network.  If the payload assigned to the response is too large to be transmitted without
-  /// fragmenting into blocks, the block handler will cache the response and serve it out
-  /// via subsequent client requests (that in turn must be directed to [`intercept_request`]).
+  /// Intercept a prepared response before it is to be delivered over the network.  If the payload
+  /// assigned to the response is too large to be transmitted without fragmenting into blocks, the
+  /// block handler will cache the response and serve it out via subsequent client requests (that
+  /// in turn must be directed to [`intercept_request`]).
   ///
   /// Returns true if the response has been manipulated and is being handled using Block1 or Block2
   /// fragmentation; false otherwise
