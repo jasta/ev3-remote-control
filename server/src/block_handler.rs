@@ -1,6 +1,8 @@
 //! General purpose implementation of block transfer support (RFC 7959).
 //!
-//! Supports both Block1 and Block2.
+//! Supports both Block1 and Block2 and is intended to be compliant with the standard but lenient
+//! to tolerate mixed use cases.  In-memory caching of request and response bodies is used to
+//! achieve the generic interaction.
 
 use std::cmp::min;
 use std::collections::Bound;
@@ -73,13 +75,11 @@ impl<Endpoint: Ord + Clone> BlockHandler<Endpoint> {
     }
   }
 
-  /// Intercept request after it is accepted as a viable request but before we exhaustively
-  /// inspect the payload (e.g. after we know a 4.04 should not be issued in response but before we
-  /// parse the full payload and confirm it is correct).
+  /// Intercept request before application processing has occurred.
   ///
-  /// Returns true if the request requires Block1/2 handling and no further user processing
+  /// Returns true if the request requires Block1/2 handling and no further processing
   /// should occur (the response will be mutated inside the request and should be sent to the peer);
-  /// false otherwise and handling should proceed normally.
+  /// false otherwise and handling should proceed to the application normally.
   pub fn intercept_request(
     &mut self, request: &mut CoapRequest<Endpoint>
   ) -> Result<bool, HandlingError> {
