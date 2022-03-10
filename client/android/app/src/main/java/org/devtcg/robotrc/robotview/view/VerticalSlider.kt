@@ -68,7 +68,10 @@ class VerticalSlider @JvmOverloads constructor(
   set(newSticky) {
     field = newSticky
     if (!newSticky) {
-      value = valueNeutral
+      // The logic is a little flimsy but technically we're setting to valueNeutral because the
+      // _user_ doesn't have their finger down, simulating it as if the user's finger suddenly
+      // lifted up when stick was turned off.
+      setValueInternal(valueNeutral, fromUser = true)
     }
   }
 
@@ -93,8 +96,8 @@ class VerticalSlider @JvmOverloads constructor(
     this.valueTo = valueTo
     this.valueNeutral = valueNeutral
 
-    if (sticky) {
-      value = valueNeutral
+    if (!sticky) {
+      setValueInternal(valueNeutral, fromUser = false)
     }
     invalidate()
   }
