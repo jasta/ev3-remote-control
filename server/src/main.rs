@@ -1,28 +1,14 @@
-use std::borrow::Borrow;
-use std::collections::{HashMap, LinkedList};
-use std::future::Future;
-use std::io;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs};
-use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::anyhow;
-
 use clap::Parser;
-use clap::Subcommand;
 use coap::Server;
-use coap_lite::{CoapRequest, CoapResponse};
-use multimap::MultiMap;
-use querystring::QueryParams;
-use serde_json::json;
 use tokio::process::Command;
 use tokio::runtime::Runtime;
 
 use time_resource::TimeResource;
-use crate::block_handler::{BlockHandler, BlockHandlerConfig};
 
-use crate::coap_resource_server::{CoapResource, CoapResourceServer, CoapResourceServerBuilder, HandlingError};
+use crate::coap_resource_server::CoapResourceServer;
 use crate::device_resource::DevicesResource;
 use crate::device_resource::SingleDeviceResource;
-use crate::uri_query_helper::UriQueryHelper;
 
 mod coap_resource_server;
 mod uri_query_helper;
@@ -66,11 +52,11 @@ fn run_server_forever(addr: (String, u16)) {
     let mdns_future = run_mdns_advertisement(addr.1);
     let coap_future = run_coap_server(addr);
 
-    tokio::try_join!(mdns_future, coap_future);
+    tokio::try_join!(mdns_future, coap_future).unwrap();
   });
 }
 
-async fn run_mdns_advertisement(port: u16) -> anyhow::Result<()> {
+async fn run_mdns_advertisement(_port: u16) -> anyhow::Result<()> {
   // TODO: Advertised name should be based on use provided configuration.
   let mut child = Command::new("avahi-publish-service")
       .arg("ev3dev")

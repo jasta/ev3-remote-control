@@ -112,23 +112,17 @@
 //!
 //! Response Type: array of AttributeValue
 
-use std::borrow::Borrow;
 use std::collections::HashSet;
-use std::error::Error;
 use std::net::SocketAddr;
-use std::ops::Deref;
-use std::slice::Iter;
+
 use anyhow::anyhow;
-
-use coap_lite::{CoapOption, CoapRequest, ContentFormat, MessageClass, RequestType, ResponseType};
+use coap_lite::{CoapRequest, ContentFormat, MessageClass, RequestType, ResponseType};
 use coap_lite::link_format::{LINK_ATTR_CONTENT_FORMAT, LINK_ATTR_RESOURCE_TYPE, LinkAttributeWrite};
-use coap_lite::option_value::OptionValueString;
-
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::hal;
 use crate::coap_resource_server::{CoapResource, HandlingError};
-use crate::{coap_utils, hal};
 use crate::hal::{HalAttribute, HalAttributeType, HalDevice, HalDeviceType, HalError, HalResult};
 
 pub struct DevicesResource;
@@ -226,7 +220,7 @@ impl SingleDeviceResource {
     let hal = &hal::HAL;
 
     let mut path_iter = remaining_path.iter();
-    let device = match (path_iter.next()) {
+    let device = match path_iter.next() {
       None => Err(HandlingError::bad_request("Missing address"))?,
       Some(address) => {
         hal.by_address(address)?.ok_or_else(HandlingError::not_found)?

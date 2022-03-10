@@ -1,5 +1,5 @@
-use std::collections::HashMap;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use crate::hal::{Hal, HalAttribute, HalAttributeType, HalDevice, HalDeviceType, HalError, HalResult};
 
 pub struct HalMock {
@@ -82,7 +82,7 @@ impl HalDevice for HalDeviceMock {
     }
   }
 
-  fn set_attribute_str(&mut self, name: &str, value: &str) -> HalResult<()> {
+  fn set_attribute_str(&mut self, name: &str, _value: &str) -> HalResult<()> {
     match name {
       _ => Err(HalError::InternalError(format!("Attribute not writable: name={}", name))),
     }

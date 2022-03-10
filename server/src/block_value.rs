@@ -1,8 +1,7 @@
-use std::error::Error;
-use std::num::{ParseIntError, TryFromIntError};
+use std::num::TryFromIntError;
+
 use coap_lite::error::IncompatibleOptionValueFormat;
 use coap_lite::option_value::{OptionValueType, OptionValueU16};
-
 use thiserror::Error;
 
 #[derive(Debug, Clone, Eq, PartialEq)]

@@ -1,15 +1,11 @@
-use std::borrow::{Borrow, BorrowMut};
 use std::collections::HashMap;
-use std::error;
 use std::fmt::{Display, Formatter};
-use std::hash::Hasher;
 use std::net::SocketAddr;
-use std::string::FromUtf8Error;
+
 use std::sync::{Arc, Mutex};
 
 use coap_lite::link_format::*;
-use coap_lite::{CoapOption, CoapRequest, CoapResponse, ContentFormat, MessageClass, ResponseType};
-use coap_lite::option_value::OptionValueString;
+use coap_lite::{CoapRequest, CoapResponse, ContentFormat, MessageClass, ResponseType};
 use log::info;
 use log::Level::*;
 use crate::block_handler::{BlockHandler, BlockHandlerConfig};

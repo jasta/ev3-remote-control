@@ -1,9 +1,8 @@
-use std::error::Error;
 use std::fs::read_dir;
 use std::io;
-use std::str::FromStr;
-use ev3dev_lang_rust::{Attribute, Device, Driver, Ev3Error};
-use ev3dev_lang_rust::sensors::{ColorSensor, Sensor};
+
+use ev3dev_lang_rust::{Attribute, Ev3Error};
+
 use crate::hal::{Hal, HalAttribute, HalAttributeType, HalDevice, HalDeviceType, HalError, HalResult};
 
 pub struct HalEv3 {
