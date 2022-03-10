@@ -17,6 +17,12 @@ class RobotSelectionInitiationAgent(
   private val robotSelector: LiveData<RobotTarget?>
 ) {
   fun onCreate() {
+    if (robotSelector.value == null) {
+      // As a user convenience to reduce clicks, initiate the primary screen by showing the
+      // selection fragment.
+      showChooser()
+    }
+
     robotSelector.observe(activity) {
       onTargetChange(it)
     }
@@ -25,6 +31,10 @@ class RobotSelectionInitiationAgent(
   }
 
   private fun targetButtonClicked(view: View) {
+    showChooser()
+  }
+
+  private fun showChooser() {
     RobotChooserFragment().show(fragmentManager, "robot-chooser")
   }
 
