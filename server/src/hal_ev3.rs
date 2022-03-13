@@ -11,14 +11,12 @@ pub struct HalEv3 {
 impl HalEv3 {
   fn find_devices_by_sysfs_class(&self, sysfs_class: &str) -> io::Result<Vec<Box<dyn HalDevice>>> {
     let mut results = Vec::<Box<dyn HalDevice>>::new();
-    for entry_result in read_dir(format!("/sys/class/{}", sysfs_class))? {
-      if let Ok(entry) = entry_result {
-        if let Some(device_name) = entry.file_name().to_str() {
-          results.push(Box::new(HalDeviceEv3 {
-            sysfs_class: sysfs_class.to_owned(),
-            full_device_path: format!("/sys/class/{}/{}", sysfs_class, device_name).to_owned(),
-          }));
-        }
+    for entry in (read_dir(format!("/sys/class/{}", sysfs_class))?).flatten() {
+      if let Some(device_name) = entry.file_name().to_str() {
+        results.push(Box::new(HalDeviceEv3 {
+          sysfs_class: sysfs_class.to_owned(),
+          full_device_path: format!("/sys/class/{}/{}", sysfs_class, device_name).to_owned(),
+        }));
       }
     }
 
@@ -27,18 +25,16 @@ impl HalEv3 {
 
   fn find_device_by_address(&self, address: &str) -> io::Result<Option<Box<dyn HalDevice>>> {
     for sysfs_class in ["tacho-motor", "lego-sensor"] {
-      for entry_result in read_dir(format!("/sys/class/{}", sysfs_class))? {
-        if let Ok(entry) = entry_result {
-          if let Some(device_name) = entry.file_name().to_str() {
-            let full_device_path = format!("/sys/class/{}/{}", sysfs_class, device_name);
-            if let Ok(attr) = Attribute::from_path(&format!("{}/address", full_device_path)) {
-              if let Ok(value) = attr.get::<String>() {
-                if value == address {
-                  return Ok(Some(Box::new(HalDeviceEv3 {
-                    sysfs_class: sysfs_class.to_owned(),
-                    full_device_path: full_device_path.to_owned()
-                  })));
-                }
+      for entry in (read_dir(format!("/sys/class/{}", sysfs_class))?).flatten() {
+        if let Some(device_name) = entry.file_name().to_str() {
+          let full_device_path = format!("/sys/class/{}/{}", sysfs_class, device_name);
+          if let Ok(attr) = Attribute::from_path(&format!("{}/address", full_device_path)) {
+            if let Ok(value) = attr.get::<String>() {
+              if value == address {
+                return Ok(Some(Box::new(HalDeviceEv3 {
+                  sysfs_class: sysfs_class.to_owned(),
+                  full_device_path: full_device_path.to_owned()
+                })));
               }
             }
           }
