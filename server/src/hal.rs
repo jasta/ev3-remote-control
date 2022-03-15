@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::mpsc::Receiver;
 
 use lazy_static::lazy_static;
 use thiserror::Error;
@@ -18,6 +19,10 @@ pub trait Hal {
   fn list_devices(&self) -> HalResult<Vec<Box<dyn HalDevice>>>;
   fn by_driver(&self, driver: &str) -> HalResult<Vec<Box<dyn HalDevice>>>;
   fn by_address(&self, address: &str) -> HalResult<Option<Box<dyn HalDevice>>>;
+
+  /// Watch for any change such that [`list_devices`] would yield a different result.  Any
+  /// emission on the receiver indicates a change.
+  fn watch_devices(&self) -> anyhow::Result<Receiver<()>>;
 }
 
 #[derive(Error, Debug)]
@@ -45,6 +50,10 @@ pub trait HalDevice {
 
   fn get_attribute_str(&self, name: &str) -> HalResult<String>;
   fn set_attribute_str(&mut self, name: &str, value: &str) -> HalResult<()>;
+
+  /// Watch for any change such that [`get_attribute_str`] would yield a different result
+  /// for any of the provided set of names.  Any emission on the receiver indicates a change.
+  fn watch_attributes(&self, names: &[String]) -> anyhow::Result<Receiver<()>>;
 }
 
 #[derive(Debug, Copy, Clone)]

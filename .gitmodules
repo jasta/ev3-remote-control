@@ -1,3 +1,0 @@
-[submodule "server/coap-rs"]
-	path = server/coap-rs
-	url = https://github.com/Covertness/coap-rs

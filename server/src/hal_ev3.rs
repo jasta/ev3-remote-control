@@ -1,7 +1,13 @@
 use std::fs::read_dir;
-use std::io;
+use std::{io, thread};
+use std::path::Path;
+use std::sync::mpsc::{Receiver, Sender};
+use std::time::Duration;
 
 use ev3dev_lang_rust::{Attribute, Ev3Error};
+use log::debug;
+use notify::poll::PollWatcherConfig;
+use notify::{Event, PollWatcher, RecursiveMode, Watcher};
 
 use crate::hal::{Hal, HalAttribute, HalAttributeType, HalDevice, HalDeviceType, HalError, HalResult};
 
@@ -71,6 +77,12 @@ impl Hal for HalEv3 {
   fn by_address(&self, address: &str) -> HalResult<Option<Box<dyn HalDevice>>> {
     self.find_device_by_address(address)
         .map_err(|e| HalError::InternalError(e.to_string()))
+  }
+
+  fn watch_devices(&self) -> anyhow::Result<Receiver<()>> {
+    let paths = ["tacho-motor", "lego-sensor"]
+        .map(|path| format!("/sys/class/{}", path));
+    watch_paths(&paths, Duration::from_secs(2))
   }
 }
 
@@ -142,17 +154,26 @@ impl HalDevice for HalDeviceEv3 {
   }
 
   fn get_attribute_str(&self, name: &str) -> HalResult<String> {
-    log::debug!("Reading attribute {}...", name);
+    debug!("Reading attribute {}...", name);
     Attribute::from_path(&format!("{}/{}", self.full_device_path, name))
         .and_then(|a| a.get())
         .map_err(convert_to_hal_error)
   }
 
   fn set_attribute_str(&mut self, name: &str, value: &str) -> HalResult<()> {
-    log::debug!("Writing attribute {}={}...", name, value);
+    debug!("Writing attribute {}={}...", name, value);
     Attribute::from_path(&format!("{}/{}", self.full_device_path, name))
         .and_then(|a| a.set(value))
         .map_err(convert_to_hal_error)
+  }
+
+  fn watch_attributes(&self, names: &[String]) -> anyhow::Result<Receiver<()>> {
+    let attr_paths = names.iter()
+        .map(|name| format!("{}/{name}", self.full_device_path))
+        .collect::<Vec<_>>();
+
+    watch_paths(&attr_paths, Duration::from_millis(100));
+    todo!()
   }
 }
 
@@ -163,5 +184,57 @@ fn convert_to_hal_error(err: Ev3Error) -> HalError {
     Ev3Error::MultipleMatches { device, ports } => HalError::InternalError(
       format!("MultipleMatches: device: {}, ports: {:?}", device, ports)
     ),
+  }
+}
+
+fn watch_paths(paths: &[String], poll_interval: Duration) -> anyhow::Result<Receiver<()>> {
+  let (tx, rx) = std::sync::mpsc::channel();
+  let mut watcher = PollWatcher::with_config(tx, PollWatcherConfig {
+    compare_contents: true,
+    poll_interval,
+  }).unwrap();
+  for path in paths {
+    watcher.watch(Path::new(path), RecursiveMode::NonRecursive)?;
+  }
+  let (mapped_tx, mapped_rx) = std::sync::mpsc::channel();
+  thread::spawn(move || {
+    debug!("Spawning new thread for watch_devices...");
+    let result = map_watcher_events(rx, mapped_tx);
+    debug!("watch_devices thread exiting: {:?}...", result);
+
+    // There is drop logic in the watcher that attempts to shutdown its event loop, but
+    // we actually want to extend that event loop to match this thread (thus when
+    // mapped_rx is dropped, that will cause mapped_tx to shutdown and then finally the watcher
+    // itself to drop here.
+    drop(watcher);
+  });
+  Ok(mapped_rx)
+}
+
+fn map_watcher_events(rx: Receiver<notify::Result<Event>>, mapped_tx: Sender<()>) -> anyhow::Result<()> {
+  loop {
+    let event = rx.recv()?;
+    debug!("Got {:?}", event);
+    mapped_tx.send(())?;
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_watch_devices_new_directory() {
+    env_logger::builder().is_test(true).init();
+
+    let tempdir = tempfile::tempdir().unwrap();
+    let tempdir_str = tempdir.path().to_str().unwrap().to_owned();
+    let receiver = watch_paths(&[tempdir_str], Duration::from_millis(10)).unwrap();
+
+    for i in 0..5 {
+      let testdir = tempdir.path().join(format!("testdir-{i}"));
+      std::fs::create_dir(testdir).unwrap();
+      receiver.recv_timeout(Duration::from_secs(90)).unwrap();
+    }
   }
 }

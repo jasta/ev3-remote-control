@@ -1,3 +1,4 @@
+use std::sync::mpsc::Receiver;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::hal::{Hal, HalAttribute, HalAttributeType, HalDevice, HalDeviceType, HalError, HalResult};
@@ -41,6 +42,10 @@ impl Hal for HalMock {
     Ok(self.devices.iter()
         .find(|d| d.address == address)
         .map(|d| Box::new(d.clone()) as Box<dyn HalDevice>))
+  }
+
+  fn watch_devices(&self) -> anyhow::Result<Receiver<()>> {
+    todo!()
   }
 }
 
@@ -86,5 +91,9 @@ impl HalDevice for HalDeviceMock {
     match name {
       _ => Err(HalError::InternalError(format!("Attribute not writable: name={}", name))),
     }
+  }
+
+  fn watch_attributes(&self, names: &[String]) -> anyhow::Result<Receiver<()>> {
+    todo!()
   }
 }

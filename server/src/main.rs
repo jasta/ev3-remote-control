@@ -1,21 +1,15 @@
 use anyhow::anyhow;
 use clap::Parser;
-use coap::Server;
+use coap_server::{app, CoapServer, UdpTransport};
+use log::info;
 use tokio::process::Command;
 use tokio::runtime::Runtime;
+use crate::device_resource::device_resources;
 
-use crate::coap_resource_server::CoapResourceServer;
-use crate::device_resource::DevicesResource;
-use crate::device_resource::SingleDeviceResource;
-
-mod coap_resource_server;
 mod device_resource;
 mod hal;
 mod hal_ev3;
-mod coap_utils;
 mod hal_mock;
-mod block_handler;
-mod block_value;
 mod layout_resource;
 
 #[derive(Parser)]
@@ -66,17 +60,10 @@ async fn run_mdns_advertisement(_port: u16) -> anyhow::Result<()> {
 }
 
 async fn run_coap_server(addr: (String, u16)) -> anyhow::Result<()> {
-  let server_handler = CoapResourceServer::builder()
-      .add_resource(Box::new(DevicesResource {}))
-      .add_resource(Box::new(SingleDeviceResource {}))
-      .build();
-
-  let mut server = Server::new(addr)?;
-  println!("Server up on {:?}", server.socket_addr()?);
-
-  server.run(|request| async {
-    server_handler.handle(request)
-  }).await?;
-
+  let server = CoapServer::bind(UdpTransport::new(addr.clone())).await?;
+  info!("Server up on {addr:?}");
+  server.serve(
+    app::new()
+        .resources(device_resources())).await?;
   Err(anyhow!("Unexpected CoAP server exit!"))
 }
