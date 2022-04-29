@@ -244,7 +244,7 @@ fn handle_single_device_get(
         }
       }
     },
-    _ => Err(CoapError::method_not_allowed())?,
+    _ => Err(CoapError::not_found())?,
   };
 
   let mut reply = request.new_response();
