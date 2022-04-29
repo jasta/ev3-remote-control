@@ -1,7 +1,9 @@
-use std::sync::mpsc::Receiver;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::Arc;
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use anyhow::anyhow;
 
-use crate::hal::{Hal, HalAttribute, HalAttributeType, HalDevice, HalDeviceType, HalError, HalResult};
+use crate::hal::{Hal, HalAttribute, HalAttributeType, HalDevice, HalDeviceType, HalError, HalResult, WatchHandle};
 
 pub struct HalMock {
   devices: Vec<HalDeviceMock>,
@@ -44,8 +46,22 @@ impl Hal for HalMock {
         .map(|d| Box::new(d.clone()) as Box<dyn HalDevice>))
   }
 
-  fn watch_devices(&self) -> anyhow::Result<Receiver<()>> {
-    todo!()
+  fn watch_devices(&self) -> anyhow::Result<WatchHandle> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let cancel_handle = Arc::new("dummy".to_string());
+    let weak_handle = Arc::downgrade(&cancel_handle);
+    thread::spawn(move || {
+      loop {
+        thread::sleep(Duration::from_secs(2));
+        if weak_handle.upgrade().is_none() {
+          break;
+        }
+        if tx.send(()).is_err() {
+          break;
+        }
+      }
+    });
+    Ok(WatchHandle::new(cancel_handle, rx))
   }
 }
 
@@ -93,7 +109,25 @@ impl HalDevice for HalDeviceMock {
     }
   }
 
-  fn watch_attributes(&self, names: &[String]) -> anyhow::Result<Receiver<()>> {
-    todo!()
+  fn watch_attributes(&self, names: &[String]) -> anyhow::Result<WatchHandle> {
+    if names.contains(&("time".to_string())) {
+      let (tx, rx) = std::sync::mpsc::channel();
+      let cancel_handle = Arc::new("dummy".to_string());
+      let weak_handle = Arc::downgrade(&cancel_handle);
+      thread::spawn(move || {
+        loop {
+          thread::sleep(Duration::from_secs(1));
+          if weak_handle.upgrade().is_none() {
+            break;
+          }
+          if tx.send(()).is_err() {
+            break;
+          }
+        }
+      });
+      Ok(WatchHandle::new(cancel_handle, rx))
+    } else {
+      Err(anyhow!("No watchable attribute in {names:?}"))
+    }
   }
 }

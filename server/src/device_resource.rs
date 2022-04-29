@@ -113,55 +113,38 @@
 //! Response Type: array of AttributeValue
 
 use std::collections::HashSet;
-use std::future::Future;
 use std::net::SocketAddr;
-
 use anyhow::anyhow;
-use async_trait::async_trait;
 use coap_lite::{ContentFormat, MessageClass, RequestType, ResponseType};
 use coap_lite::link_format::{LINK_ATTR_CONTENT_FORMAT, LINK_ATTR_RESOURCE_TYPE};
 use coap_server::app;
 use coap_server::app::{CoapError, Request, ResourceBuilder, Response};
-use coap_server::app::request_handler::RequestHandler;
 use serde::Deserialize;
 use serde::Serialize;
+use crate::anyhow_error_wrapper::AnyhowErrorWrapper;
+use crate::attributes_observable::HalWatchAttributes;
+use crate::devices_observable::HalWatchDevices;
 
 use crate::hal;
 use crate::hal::{HalAttribute, HalAttributeType, HalDevice, HalDeviceType, HalError, HalResult};
 
 pub fn device_resources() -> Vec<ResourceBuilder<SocketAddr>> {
+  let watch_attributes = HalWatchAttributes::default();
+  let watch_attributes_for_handler = watch_attributes.clone();
   [
     app::resource("devices")
       .link_attr(LINK_ATTR_RESOURCE_TYPE, "devices")
       .link_attr(LINK_ATTR_CONTENT_FORMAT, ContentFormat::ApplicationJSON)
+      .observable(HalWatchDevices::default())
       .get(AnyhowErrorWrapper::new(handle_list_devices)),
     app::resource("device")
       .link_attr(LINK_ATTR_RESOURCE_TYPE, "device")
       .link_attr(LINK_ATTR_CONTENT_FORMAT, ContentFormat::ApplicationJSON)
-      .default_handler(AnyhowErrorWrapper::new(handle_single_device)),
+      .observable(watch_attributes)
+      .default_handler(
+        AnyhowErrorWrapper::new(
+          move |req| handle_single_device(req, watch_attributes_for_handler.clone()))),
   ].into_iter().collect()
-}
-
-#[derive(Clone)]
-struct AnyhowErrorWrapper<F> {
-  wrapper: F,
-}
-
-impl<F> AnyhowErrorWrapper<F> {
-  pub fn new(wrapper: F) -> Self {
-    Self { wrapper }
-  }
-}
-
-#[async_trait]
-impl<F, R> RequestHandler<SocketAddr> for AnyhowErrorWrapper<F>
-where
-    F: Fn(Request<SocketAddr>) -> R + Clone + Send + Sync + 'static,
-    R: Future<Output = anyhow::Result<Response>> + Send {
-  async fn handle(&self, request: Request<SocketAddr>) -> Result<Response, CoapError> {
-    (self.wrapper)(request).await
-        .map_err(anyhow_error_mapping)
-  }
 }
 
 async fn handle_list_devices(request: Request<SocketAddr>) -> anyhow::Result<Response> {
@@ -190,28 +173,41 @@ async fn handle_list_devices(request: Request<SocketAddr>) -> anyhow::Result<Res
   Ok(reply)
 }
 
-async fn handle_single_device(request: Request<SocketAddr>) -> anyhow::Result<Response> {
+async fn handle_single_device(request: Request<SocketAddr>, watch: HalWatchAttributes) -> anyhow::Result<Response> {
   let method = *request.original.get_method();
   let hal = &hal::HAL;
 
-  let mut path_iter = request.unmatched_path.iter();
+  let unmatched_path_for_iter = request.unmatched_path.clone();
+  let mut path_iter = unmatched_path_for_iter.into_iter();
   let device = match path_iter.next() {
     None => Err(CoapError::bad_request("Missing address"))?,
     Some(address) => {
-      hal.by_address(address)?.ok_or_else(CoapError::not_found)?
+      hal.by_address(&address)?.ok_or_else(CoapError::not_found)?
     },
   };
 
   match method {
-    RequestType::Get => handle_single_device_get(device, &request, path_iter.as_slice()),
-    RequestType::Put => handle_single_device_put(device, &request, path_iter.as_slice()),
+    RequestType::Get => handle_single_device_get(device, request, path_iter.as_slice()),
+    RequestType::Put => {
+      let unmatched_path_flat = request.unmatched_path.join("/");
+      let put_result = handle_single_device_put(device, request, path_iter.as_slice());
+
+      // Must spawn another task here because rustc is too basic to understand that
+      // device is dropped already and it doesn't matter if it's Send or not:
+      // https://rust-lang.github.io/async-book/07_workarounds/03_send_approximation.html
+      tokio::spawn(async move {
+        watch.observers.notify_change_for_path(&unmatched_path_flat).await;
+      });
+
+      put_result
+    },
     _ => Err(CoapError::method_not_allowed())?
   }
 }
 
 fn handle_single_device_get(
     device: Box<dyn HalDevice>,
-    request: &Request<SocketAddr>,
+    request: Request<SocketAddr>,
     remaining_path: &[String]
 ) -> anyhow::Result<Response> {
   let mut path_iter = remaining_path.iter();
@@ -255,8 +251,8 @@ fn handle_single_device_get(
 
 fn handle_single_device_put(
     mut device: Box<dyn HalDevice>,
-    request: &Request<SocketAddr>,
-    remaining_path: &[String]
+    request: Request<SocketAddr>,
+    remaining_path: &[String],
 ) -> anyhow::Result<Response> {
   let mut path_iter = remaining_path.iter();
   match path_iter.next() {
@@ -277,13 +273,6 @@ fn handle_single_device_put(
   reply.message.header.code = MessageClass::Response(ResponseType::Changed);
   reply.message.payload.clear();
   Ok(reply)
-}
-
-fn anyhow_error_mapping(error: anyhow::Error) -> CoapError {
-  match error.downcast_ref::<CoapError>() {
-    Some(e) => e.clone(),
-    None => CoapError::internal(error),
-  }
 }
 
 #[derive(Serialize, Deserialize)]

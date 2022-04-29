@@ -11,6 +11,9 @@ mod hal;
 mod hal_ev3;
 mod hal_mock;
 mod layout_resource;
+mod devices_observable;
+mod anyhow_error_wrapper;
+mod attributes_observable;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]

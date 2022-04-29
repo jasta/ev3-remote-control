@@ -9,7 +9,7 @@ use log::debug;
 use notify::poll::PollWatcherConfig;
 use notify::{Event, PollWatcher, RecursiveMode, Watcher};
 
-use crate::hal::{Hal, HalAttribute, HalAttributeType, HalDevice, HalDeviceType, HalError, HalResult};
+use crate::hal::{Hal, HalAttribute, HalAttributeType, HalDevice, HalDeviceType, HalError, HalResult, WatchHandle};
 
 pub struct HalEv3 {
 }
@@ -79,7 +79,7 @@ impl Hal for HalEv3 {
         .map_err(|e| HalError::InternalError(e.to_string()))
   }
 
-  fn watch_devices(&self) -> anyhow::Result<Receiver<()>> {
+  fn watch_devices(&self) -> anyhow::Result<WatchHandle> {
     let paths = ["tacho-motor", "lego-sensor"]
         .map(|path| format!("/sys/class/{}", path));
     watch_paths(&paths, Duration::from_secs(2))
@@ -167,13 +167,12 @@ impl HalDevice for HalDeviceEv3 {
         .map_err(convert_to_hal_error)
   }
 
-  fn watch_attributes(&self, names: &[String]) -> anyhow::Result<Receiver<()>> {
+  fn watch_attributes(&self, names: &[String]) -> anyhow::Result<WatchHandle> {
     let attr_paths = names.iter()
         .map(|name| format!("{}/{name}", self.full_device_path))
         .collect::<Vec<_>>();
 
-    watch_paths(&attr_paths, Duration::from_millis(100));
-    todo!()
+    watch_paths(&attr_paths, Duration::from_millis(100))
   }
 }
 
@@ -187,7 +186,7 @@ fn convert_to_hal_error(err: Ev3Error) -> HalError {
   }
 }
 
-fn watch_paths(paths: &[String], poll_interval: Duration) -> anyhow::Result<Receiver<()>> {
+fn watch_paths(paths: &[String], poll_interval: Duration) -> anyhow::Result<WatchHandle> {
   let (tx, rx) = std::sync::mpsc::channel();
   let mut watcher = PollWatcher::with_config(tx, PollWatcherConfig {
     compare_contents: true,
@@ -201,14 +200,8 @@ fn watch_paths(paths: &[String], poll_interval: Duration) -> anyhow::Result<Rece
     debug!("Spawning new thread for watch_devices...");
     let result = map_watcher_events(rx, mapped_tx);
     debug!("watch_devices thread exiting: {:?}...", result);
-
-    // There is drop logic in the watcher that attempts to shutdown its event loop, but
-    // we actually want to extend that event loop to match this thread (thus when
-    // mapped_rx is dropped, that will cause mapped_tx to shutdown and then finally the watcher
-    // itself to drop here.
-    drop(watcher);
   });
-  Ok(mapped_rx)
+  Ok(WatchHandle::new(watcher, mapped_rx))
 }
 
 fn map_watcher_events(rx: Receiver<notify::Result<Event>>, mapped_tx: Sender<()>) -> anyhow::Result<()> {
@@ -225,16 +218,30 @@ mod tests {
 
   #[test]
   fn test_watch_devices_new_directory() {
-    env_logger::builder().is_test(true).init();
+    let _ = env_logger::builder().is_test(true).try_init();
 
     let tempdir = tempfile::tempdir().unwrap();
     let tempdir_str = tempdir.path().to_str().unwrap().to_owned();
-    let receiver = watch_paths(&[tempdir_str], Duration::from_millis(10)).unwrap();
+    let handle = watch_paths(&[tempdir_str], Duration::from_millis(10)).unwrap();
 
     for i in 0..5 {
       let testdir = tempdir.path().join(format!("testdir-{i}"));
       std::fs::create_dir(testdir).unwrap();
-      receiver.recv_timeout(Duration::from_secs(90)).unwrap();
+      handle.receiver.recv_timeout(Duration::from_secs(90)).unwrap();
     }
+  }
+
+  #[test]
+  fn test_drop_causes_cancel() {
+    let _ = env_logger::builder().is_test(true).try_init();
+
+    let tempdir = tempfile::tempdir().unwrap();
+    let tempdir_str = tempdir.path().to_str().unwrap().to_owned();
+    let mut handle = watch_paths(&[tempdir_str], Duration::from_millis(10)).unwrap();
+
+    handle.drop_for_test();
+
+    let result = handle.receiver.recv();
+    assert!(result.is_err());
   }
 }

@@ -1,3 +1,4 @@
+use std::mem;
 use std::path::Path;
 use std::sync::mpsc::Receiver;
 
@@ -22,7 +23,7 @@ pub trait Hal {
 
   /// Watch for any change such that [`list_devices`] would yield a different result.  Any
   /// emission on the receiver indicates a change.
-  fn watch_devices(&self) -> anyhow::Result<Receiver<()>>;
+  fn watch_devices(&self) -> anyhow::Result<WatchHandle>;
 }
 
 #[derive(Error, Debug)]
@@ -42,6 +43,29 @@ pub enum HalError {
 
 pub type HalResult<T> = Result<T, HalError>;
 
+pub struct WatchHandle {
+  /// Dropping this will stop the watch.
+  cancel_handle: Option<Box<dyn Drop + Send>>,
+
+  /// Listen here for watch changes.  No events are sent, just a generic message indicating
+  /// something changed.
+  pub receiver: Receiver<()>,
+}
+
+impl WatchHandle {
+  pub fn new<T: Drop + Send + 'static>(cancel_handle: T, receiver: Receiver<()>) -> Self {
+    Self {
+      cancel_handle: Some(Box::new(cancel_handle)),
+      receiver,
+    }
+  }
+
+  pub(crate) fn drop_for_test(&mut self) {
+    let old = mem::take(&mut self.cancel_handle);
+    assert!(old.is_some());
+  }
+}
+
 pub trait HalDevice {
   fn get_type(&self) -> HalResult<HalDeviceType>;
   fn get_driver_name(&self) -> HalResult<String>;
@@ -53,7 +77,7 @@ pub trait HalDevice {
 
   /// Watch for any change such that [`get_attribute_str`] would yield a different result
   /// for any of the provided set of names.  Any emission on the receiver indicates a change.
-  fn watch_attributes(&self, names: &[String]) -> anyhow::Result<Receiver<()>>;
+  fn watch_attributes(&self, names: &[String]) -> anyhow::Result<WatchHandle>;
 }
 
 #[derive(Debug, Copy, Clone)]
