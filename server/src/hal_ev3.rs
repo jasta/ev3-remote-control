@@ -5,7 +5,7 @@ use std::time::Duration;
 use std::{io, thread};
 
 use ev3dev_lang_rust::{Attribute, Ev3Error};
-use log::debug;
+use log::{debug, trace};
 use notify::poll::PollWatcherConfig;
 use notify::{Event, PollWatcher, RecursiveMode, Watcher};
 
@@ -161,7 +161,7 @@ impl HalDevice for HalDeviceEv3 {
     }
 
     fn get_attribute_str(&self, name: &str) -> HalResult<String> {
-        debug!("Reading attribute {}...", name);
+        trace!("Reading attribute {}...", name);
         Attribute::from_path(&format!("{}/{}", self.full_device_path, name))
             .and_then(|a| a.get())
             .map_err(convert_to_hal_error)
