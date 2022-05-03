@@ -3,7 +3,7 @@ use crate::hal::WatchHandle;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use coap_server::app::{ObservableResource, Observers, ObserversHolder};
-use log::error;
+use log::{error, info};
 use std::thread;
 
 #[derive(Default, Clone)]
@@ -15,6 +15,8 @@ pub struct HalWatchAttributes {
 impl ObservableResource for HalWatchAttributes {
     async fn on_active(&self, observers: Observers) -> Observers {
         let relative_path_flat = observers.relative_path();
+        let relative_path_flat_local = relative_path_flat.clone();
+        info!("Observe active for {relative_path_flat_local}");
         let relative_path_vec: Vec<_> = observers
             .relative_path()
             .split('/')
@@ -41,7 +43,9 @@ impl ObservableResource for HalWatchAttributes {
                 error!("Cannot watch attributes: {e:?}");
             }
         }
-        attached.detach().await
+        let detached = attached.detach().await;
+        info!("Observe no longer active for {relative_path_flat_local}");
+        detached
     }
 }
 

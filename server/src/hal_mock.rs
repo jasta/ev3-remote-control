@@ -15,11 +15,11 @@ impl HalMock {
     pub fn with_hardcoded_devices() -> Self {
         let devices = vec![HalDeviceMock {
             device_type: HalDeviceType::Sensor,
-            driver_name: "mock".to_owned(),
-            address: "in1".to_owned(),
+            driver_name: "lego-ev3-ir".to_owned(),
+            address: "ev3-ports:in1".to_owned(),
             attributes: vec![
-                HalAttribute::new_readonly(HalAttributeType::String, "hello"),
-                HalAttribute::new_readonly(HalAttributeType::UInt32, "time"),
+                HalAttribute::new_readonly(HalAttributeType::String, "mode"),
+                HalAttribute::new_readonly(HalAttributeType::UInt32, "value0"),
             ],
         }];
         Self { devices }
@@ -57,7 +57,7 @@ impl Hal for HalMock {
         let cancel_handle = Arc::new("dummy".to_string());
         let weak_handle = Arc::downgrade(&cancel_handle);
         thread::spawn(move || loop {
-            thread::sleep(Duration::from_secs(2));
+            thread::sleep(Duration::from_secs(60));
             if weak_handle.upgrade().is_none() {
                 break;
             }
@@ -96,10 +96,17 @@ impl HalDevice for HalDeviceMock {
 
     fn get_attribute_str(&self, name: &str) -> HalResult<String> {
         match name {
-            "hello" => Ok("world".to_owned()),
-            "time" => {
-                let since_epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-                Ok(format!("{:?}", since_epoch.as_millis()))
+            "mode" => Ok("IR-PROX".to_owned()),
+            "value0" => {
+                // Oscillate between 0 and 100, ticking once per second.
+                let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+                let interval = now.as_secs() % 200;
+                let value = if interval > 100 {
+                    200 - interval
+                } else {
+                    interval
+                };
+                Ok(value.to_string())
             }
             _ => Err(HalError::InternalError(format!(
                 "Invalid attribute: name={}",
@@ -118,7 +125,7 @@ impl HalDevice for HalDeviceMock {
     }
 
     fn watch_attributes(&self, names: &[String]) -> anyhow::Result<WatchHandle> {
-        if names.contains(&("time".to_string())) {
+        if names.contains(&("value0".to_string())) {
             let (tx, rx) = std::sync::mpsc::channel();
             let cancel_handle = Arc::new("dummy".to_string());
             let weak_handle = Arc::downgrade(&cancel_handle);
