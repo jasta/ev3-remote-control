@@ -47,11 +47,9 @@ class Ev3RawRobotLayout: RobotLayout {
     return remoteAddress.startsWith(localPortAddress)
   }
 
-  override fun onAttributesUpdated(allAttributes: Map<String, DeviceAttributesSnapshot>) {
-    for ((deviceAddress, attributes) in allAttributes) {
-      deviceViewHolders.values.find { matchAddress(deviceAddress, it.address) }?.let { holder ->
-        holder.widget?.onBindView(holder.view!!, attributes)
-      }
+  override fun onDeviceAttributesUpdated(deviceAddress: String, attributes: DeviceAttributesSnapshot) {
+    deviceViewHolders.values.find { matchAddress(deviceAddress, it.address) }?.let { holder ->
+      holder.widget?.onBindView(holder.view!!, attributes)
     }
   }
 
@@ -72,22 +70,25 @@ class Ev3RawRobotLayout: RobotLayout {
       }
       DeviceType.ACTUATOR -> LegoMotorWidget::class.java
     }
-    if (viewHolder.widget?.javaClass != targetWidgetClass) {
+
+    viewHolder.model = model
+
+    val currentWidget = viewHolder.widget
+    val activeWidget = if (currentWidget?.javaClass != targetWidgetClass) {
       val context = rootBinding.root.context
 
       viewHolder.model?.updateAttributeSpec(emptyList())
       viewHolder.clearBinding()
 
-      if (targetWidgetClass == null) {
-        Log.w(TAG, "Unsupported device type: ${model.intrinsics.type}")
-        return
-      } else {
-        val widget = targetWidgetClass.newInstance()
-        val view = widget.onCreateView(LayoutInflater.from(context), viewHolder.portBinding.portView)
-        widget.onDeviceModelUpdated(model)
-        viewHolder.assignBinding(model, widget, view)
-      }
+      val newWidget = targetWidgetClass.newInstance()
+      val view = newWidget.onCreateView(LayoutInflater.from(context), viewHolder.portBinding.portView)
+      viewHolder.assignBinding(model, newWidget, view)
+      newWidget
+    } else {
+      currentWidget
     }
+
+    activeWidget?.onDeviceModelUpdated(model)
   }
 
   override fun onCreateView(inflater: LayoutInflater, parent: ViewGroup?): View {

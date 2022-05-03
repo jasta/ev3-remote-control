@@ -20,11 +20,11 @@ interface RobotLayout {
   fun onDevicesUpdated(devices: List<DeviceModelApi>)
 
   /**
-   * Called to inform that attribute values have been updated for one or all devices.  Note that
-   * this doesn't necessarily communicate whether the attribute values have changed.  Local
-   * diffing would be needed to determine that.
+   * Called to inform that attribute values have been updated for one specific device.  Note
+   * that not all values will have been changed so local diffing may still be required for
+   * performance reasons.
    */
-  fun onAttributesUpdated(allAttributes: Map<String, DeviceAttributesSnapshot>)
+  fun onDeviceAttributesUpdated(deviceAddress: String, attributes: DeviceAttributesSnapshot)
 
   /**
    * Create the main robot layout, happens immediately even before we've transacted with the robot

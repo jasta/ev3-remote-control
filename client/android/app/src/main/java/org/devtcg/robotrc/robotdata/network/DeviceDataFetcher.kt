@@ -7,6 +7,7 @@ import androidx.lifecycle.MutableLiveData
 import org.devtcg.robotrc.networkservice.model.Attribute
 import org.devtcg.robotrc.networkservice.model.AttributeValue
 import org.devtcg.robotrc.networkservice.model.Device
+import org.devtcg.robotrc.networkservice.network.CancelTrigger
 import org.devtcg.robotrc.networkservice.network.RemoteControlService
 import org.devtcg.robotrc.robotdata.api.AttributeSpec
 import org.devtcg.robotrc.robotdata.api.DeviceModelApi
@@ -27,7 +28,16 @@ class DeviceDataFetcher(
   companion object {
     private const val TAG = "DeviceFetcher"
 
-    private const val DEVICE_LIST_UPDATE_FREQUENCY_MS: Long = 10_000
+    /**
+     * Length of time we will wait with no response from the peer before re-issuing our
+     * observe requests to make sure the server is still there and responding as it should.
+     */
+    private const val NO_PEER_RESPONSE_TIMEOUT: Long = 15_000
+
+    /**
+     * Enabled only to help debug Observe support issues in the server
+     */
+    private const val DISABLE_NO_RESPONSE_TIMEOUT = true
 
     /**
      * Debugging feature to arbitrarily force a write delay to the remote peer to verify that
@@ -43,7 +53,7 @@ class DeviceDataFetcher(
   private var deviceListFuture: Future<*>? = null
 
   @GuardedBy("this")
-  private var relevantUpdateFuture: Future<*>? = null
+  private var deviceListCancel: CancelTrigger? = null
 
   @GuardedBy("this")
   private var pendingWritesFuture: Future<*>? = null
@@ -52,7 +62,13 @@ class DeviceDataFetcher(
   private var localDeviceStates = HashMap<Device, LocalDeviceState>()
 
   private data class LocalDeviceState(
+    /**
+     * Remote observe request cancel trigger
+     */
+    var cancelTrigger: CancelTrigger? = null,
+
     var recentFetch: Map<String, AttributeValueLocal> = mapOf(),
+    var recentFetchTimeMs: Long = 0,
 
     /**
      * Writes that we're attempting to transact with the peer.  These values will be presumed to be
@@ -86,15 +102,48 @@ class DeviceDataFetcher(
   private fun start() {
     check(!started)
     check(deviceListFuture == null)
-    check(relevantUpdateFuture == null)
 
     started = true
 
-    deviceListFuture = fetchingExecutor.scheduleAtFixedRate(
-      ::refreshDeviceList,
-      0 /* initialDelay */,
-      DEVICE_LIST_UPDATE_FREQUENCY_MS,
-      TimeUnit.MILLISECONDS)
+    performDeviceListObserve()
+    forceScheduleNoResponseTimeout()
+  }
+
+  @Synchronized
+  private fun forceScheduleNoResponseTimeout() {
+    if (!DISABLE_NO_RESPONSE_TIMEOUT) {
+      if (started) {
+        deviceListFuture?.cancel(false)
+        deviceListFuture = fetchingExecutor.schedule(
+          ::performDeviceListObserve,
+          NO_PEER_RESPONSE_TIMEOUT,
+          TimeUnit.MILLISECONDS
+        )
+      }
+    }
+  }
+
+  @Synchronized
+  private fun performDeviceListObserve() {
+    // Note that it's harmless to issue this call in an overlapping fashion since the
+    // peer will simply cancel the old observer silently and use this new one as the main
+    // handle.  That said, we do need to cancel our _local_ handle for this request or
+    // our CoAP client will keep re-asserting the request.
+    Log.i(TAG, "Issuing observeDevices...")
+    deviceListCancel?.cancel()
+    deviceListCancel = service.observeDevices { result ->
+      result.fold(onSuccess = {
+        if (started) {
+          forceScheduleNoResponseTimeout()
+          emitDeviceList(it)
+        }
+      }, onFailure = {
+        // Rare edge case failure, but it's OK because we'll treat this the same as
+        // disconnecting (i.e. walking away from the robot with your phone) and will retry
+        // again automatically soon.
+        Log.e(TAG, "observeDevices failure: $it, should automatically re-establish...")
+      })
+    }
   }
 
   @Synchronized
@@ -102,13 +151,23 @@ class DeviceDataFetcher(
     check(started)
     started = false
 
-    try {
-      deviceListFuture!!.cancel(false)
-      deviceListFuture = null
-    } finally {
-      relevantUpdateFuture?.cancel(false)
-      relevantUpdateFuture = null
+    pendingWritesFuture?.cancel(false)
+    pendingWritesFuture = null
+
+    deviceListCancel?.cancel()
+    deviceListCancel = null
+
+    for (deviceState in localDeviceStates.values) {
+      try {
+        deviceState.cancelTrigger?.cancel()
+      } catch (e: Exception) {
+        Log.w(TAG, "Swallowing exception during stop(): $e")
+      }
     }
+    localDeviceStates.clear()
+
+    deviceListFuture?.cancel(false)
+    deviceListFuture = null
   }
 
   @Synchronized
@@ -133,7 +192,7 @@ class DeviceDataFetcher(
     return DeviceAttributesSnapshot(
       state.recentFetch,
       state.optimisticWrites.toMap(),
-      SystemClock.elapsedRealtime())
+      state.recentFetchTimeMs)
   }
 
   private fun performAttributeWrites(device: Device) {
@@ -153,7 +212,7 @@ class DeviceDataFetcher(
     }
     try {
       service.putAttributes(device.address, attributes)
-      refreshAttributeValues()
+      refreshAttributeValues(device, service.getAttributes(device.address, attributes.map { it.name }))
     } catch (e: IOException) {
       Log.e(TAG, "Error writing to ${device.address} with $attributes: $e")
     } finally {
@@ -172,23 +231,17 @@ class DeviceDataFetcher(
     }
   }
 
-  private fun refreshDeviceList() {
-    Log.i(TAG, "Refreshing device list for $target...")
-    try {
-      val devices = service.listDevices()
-      Log.d(TAG, "Got ${devices.size} devices!")
-      val asApis = devices.map { DeviceModelApiImpl(it) }
-      allDevicesDestination.postValue(asApis)
-    } catch (e: IOException) {
-      Log.e(TAG, "Failed to refresh device list: $e")
-    }
+  private fun emitDeviceList(devices: List<Device>) {
+    Log.d(TAG, "Updated devices list: got ${devices.size} devices!")
+    val asApis = devices.map { DeviceModelApiImpl(it) }
+    allDevicesDestination.postValue(asApis)
   }
 
   private fun updateRelevantAttributesFromSpec(device: Device, specs: List<AttributeSpec>) {
     val output = mutableListOf<RelevantAttribute>()
     for (deviceAttr in device.attributes) {
       val attrSpec = specs.find { specMatchesAttr(it, deviceAttr) } ?: continue
-      output.add(RelevantAttribute(deviceAttr.name, attrSpec.updateFrequencyMs))
+      output.add(RelevantAttribute(deviceAttr.name))
     }
 
     updateRelevantAttributesForDevice(device, output)
@@ -214,62 +267,82 @@ class DeviceDataFetcher(
 
   @Synchronized
   private fun updateRelevantAttributesForDevice(device: Device, attributes: List<RelevantAttribute>) {
-    val stateAttributes = localDeviceState(device).relevantAttributes
+    val deviceState = localDeviceState(device)
+    val stateAttributes = deviceState.relevantAttributes
     stateAttributes.clear()
     stateAttributes.addAll(attributes)
 
-    // TODO: We can technically do better and have multiple scheduled futures in flight.  Might not
-    // be worth it though as the msot efficient solution is to actually use the observe feature
-    // in CoAP and only receive updates on change from the server.
-    val lowestUpdateFrequencyMs = localDeviceStates.values
-      .map { it.relevantAttributes }
-      .flatten()
-      .minOf { it.updateFrequencyMs }
-
     if (started) {
-      Log.i(TAG, "Scheduling refresh attributes every $lowestUpdateFrequencyMs ms...")
+      val attributeNames = attributes.map { it.attributeName }
+      Log.i(TAG, "Observing attribute changes for ${device.driver_name} @ ${device.address}: $attributeNames...")
 
-      relevantUpdateFuture?.cancel(false)
-      relevantUpdateFuture = fetchingExecutor.scheduleAtFixedRate(
-        ::refreshAttributeValues,
-        0 /* initialDelay */,
-        lowestUpdateFrequencyMs,
-        TimeUnit.MILLISECONDS)
+      deviceState.cancelTrigger?.cancel()
+      deviceState.cancelTrigger = service.observeAttributes(device.address, attributeNames) { result ->
+        result.fold(onSuccess = {
+          if (started) {
+            forceScheduleNoResponseTimeout()
+            refreshAttributeValues(device, it)
+          }
+        }, onFailure = {
+          Log.e(TAG, "observeAttributes failure for ${device.address}: $it, should automatically re-establish...")
+        })
+      }
     }
   }
 
-  private fun refreshAttributeValues() {
-    Log.i(TAG, "Refreshing attribute values for $target...")
+  private fun refreshAttributeValues(receivingDevice: Device, rawValuesFromPeer: List<AttributeValue>) {
+    Log.i(TAG, "Refreshing ${receivingDevice.address}: got ${rawValuesFromPeer.size} attribute values...")
 
     val fetchedAttributes = mutableMapOf<String, DeviceAttributesSnapshot>()
     val deviceStatesCopy = synchronized(this) {
       localDeviceStates.toMap()
-    }.entries
+    }
+
     for ((device, state) in deviceStatesCopy) {
-      val attributes = state.relevantAttributes
-      try {
-        val valuesFromPeer = service.getAttributes(device.address, attributes.map { it.attributeName })
-        val receivedValues = valuesFromPeer.associate {
-          val value = AttributeValueLocal(
-            device.attributes.find { attr -> attr.name == it.name }!!.type_name,
-            anyTypeFixupHack(it.value).toString(),
-            AttributeValueSource.REMOTE_READ
-          )
-          it.name to value
+      if (receivingDevice != device) {
+        fetchedAttributes[device.address] = createSnapshotLocked(state)
+      } else {
+        val attributes = state.relevantAttributes
+        try {
+          val refinedValues = refineValuesFromPeer(rawValuesFromPeer, attributes)
+          val receivedValues = refinedValues.associate {
+            val value = AttributeValueLocal(
+              device.attributes.find { attr -> attr.name == it.name }!!.type_name,
+              anyTypeFixupHack(it.value).toString(),
+              AttributeValueSource.REMOTE_READ
+            )
+            it.name to value
+          }
+          synchronized(this) {
+            state.recentFetch = receivedValues
+            state.recentFetchTimeMs = SystemClock.elapsedRealtime()
+            fetchedAttributes[device.address] = createSnapshotLocked(state)
+          }
+        } catch (e: IOException) {
+          Log.e(TAG, "Error refreshing ${device.address}: $e, moving on...")
         }
-        synchronized (this) {
-          state.recentFetch = receivedValues
-          fetchedAttributes[device.address] = createSnapshotLocked(state)
-        }
-      } catch (e: IOException) {
-        Log.e(TAG, "Error refreshing ${device.address}: $e, moving on...")
       }
     }
 
     synchronized(this) {
-      Log.d(TAG, "Updated ${fetchedAttributes.values.size} attributes!")
+      Log.d(TAG, "Emitting attribute changes for ${receivingDevice.address}...")
       relevantAttributesDestination.postValue(fetchedAttributes)
     }
+  }
+
+  /**
+   * Refine the values provided from the peer to only those that we're interested in, throwing an
+   * error if not all relevant attributes are found.
+   */
+  private fun refineValuesFromPeer(
+    values: List<AttributeValue>,
+    relevantAttributes: List<RelevantAttribute>
+  ): List<AttributeValue> {
+    val refinedValues = values.filter { relevantAttributes.contains(RelevantAttribute(it.name)) }
+    if (refinedValues.size < relevantAttributes.size) {
+      throw IOException("values=$values does not contain all required relevantAttributes=$relevantAttributes")
+    }
+    return refinedValues
   }
 
   /**
@@ -296,19 +369,11 @@ class DeviceDataFetcher(
     }
   }
 
-  @Synchronized
-  fun scheduleRefreshAttributeValues() {
-    check(started)
-    fetchingExecutor.submit(::refreshAttributeValues)
-  }
-
   private fun localDeviceState(device: Device): LocalDeviceState {
     return localDeviceStates.getOrPut(device) { LocalDeviceState() }
   }
 
-  private data class RelevantAttribute(
-    val attributeName: String,
-    val updateFrequencyMs: Long)
+  private data class RelevantAttribute(val attributeName: String)
 
   private inner class DeviceModelApiImpl(private val device: Device) : DeviceModelApi {
     override val intrinsics = DeviceIntrinsics(
