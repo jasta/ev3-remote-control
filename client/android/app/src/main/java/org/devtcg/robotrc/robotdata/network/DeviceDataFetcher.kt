@@ -26,7 +26,7 @@ class DeviceDataFetcher(
   private val relevantAttributesDestination: MutableLiveData<Map<String, DeviceAttributesSnapshot>>,
 ) {
   companion object {
-    private const val TAG = "DeviceFetcher"
+    private const val TAG = "DeviceDataFetcher"
 
     /**
      * Length of time we will wait with no response from the peer before re-issuing our
@@ -325,7 +325,6 @@ class DeviceDataFetcher(
     }
 
     synchronized(this) {
-      Log.d(TAG, "Emitting attribute changes for ${receivingDevice.address}...")
       relevantAttributesDestination.postValue(fetchedAttributes)
     }
   }
