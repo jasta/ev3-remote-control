@@ -5,6 +5,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Transformations
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.get
 import org.devtcg.robotrc.ev3.layout.Ev3RawRobotLayout
@@ -28,6 +29,9 @@ class RobotLayoutAgent(private val activity: FragmentActivity) {
   }
 
   fun onViewCreated() {
+    Transformations.distinctUntilChanged(viewModel.robotApi.connectivity).observe(activity) {
+      Log.i(TAG, "robot connectivity state change: $it")
+    }
     viewModel.robotApi.allDevices.observe(activity) {
       layout.onDevicesUpdated(it)
     }
@@ -49,8 +53,6 @@ class RobotLayoutAgent(private val activity: FragmentActivity) {
       val cachedAttributes = attributesCache.put(deviceAddress, attributes)
       if (cachedAttributes != attributes) {
         layout.onDeviceAttributesUpdated(deviceAddress, attributes)
-      } else {
-        Log.d(TAG, "Suppressing spurious updates for $deviceAddress...")
       }
     }
     attributesCache.keys.retainAll { allAttributes.containsKey(it) }

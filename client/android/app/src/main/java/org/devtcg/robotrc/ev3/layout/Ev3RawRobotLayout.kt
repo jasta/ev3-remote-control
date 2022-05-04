@@ -74,7 +74,7 @@ class Ev3RawRobotLayout: RobotLayout {
     viewHolder.model = model
 
     val currentWidget = viewHolder.widget
-    val activeWidget = if (currentWidget?.javaClass != targetWidgetClass) {
+    if (currentWidget?.javaClass != targetWidgetClass) {
       val context = rootBinding.root.context
 
       viewHolder.model?.updateAttributeSpec(emptyList())
@@ -82,13 +82,12 @@ class Ev3RawRobotLayout: RobotLayout {
 
       val newWidget = targetWidgetClass.newInstance()
       val view = newWidget.onCreateView(LayoutInflater.from(context), viewHolder.portBinding.portView)
+      newWidget.onDeviceModelUpdated(model)
       viewHolder.assignBinding(model, newWidget, view)
-      newWidget
     } else {
-      currentWidget
+      currentWidget.onDeviceModelUpdated(model)
     }
 
-    activeWidget?.onDeviceModelUpdated(model)
   }
 
   override fun onCreateView(inflater: LayoutInflater, parent: ViewGroup?): View {

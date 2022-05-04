@@ -10,6 +10,8 @@ import org.devtcg.robotrc.networkservice.model.Device
 import org.devtcg.robotrc.networkservice.network.CancelTrigger
 import org.devtcg.robotrc.networkservice.network.RemoteControlService
 import org.devtcg.robotrc.robotdata.api.AttributeSpec
+import org.devtcg.robotrc.robotdata.api.ConnectedState
+import org.devtcg.robotrc.robotdata.api.ConnectivityState
 import org.devtcg.robotrc.robotdata.api.DeviceModelApi
 import org.devtcg.robotrc.robotdata.model.*
 import org.devtcg.robotrc.robotselection.model.RobotTarget
@@ -22,6 +24,7 @@ class DeviceDataFetcher(
   private val fetchingExecutor: ScheduledExecutorService,
   private val target: RobotTarget,
   private val service: RemoteControlService,
+  private val connectivity: MutableLiveData<ConnectivityState>,
   private val allDevicesDestination: MutableLiveData<List<DeviceModelApi>>,
   private val relevantAttributesDestination: MutableLiveData<Map<String, DeviceAttributesSnapshot>>,
 ) {
@@ -32,12 +35,7 @@ class DeviceDataFetcher(
      * Length of time we will wait with no response from the peer before re-issuing our
      * observe requests to make sure the server is still there and responding as it should.
      */
-    private const val NO_PEER_RESPONSE_TIMEOUT: Long = 15_000
-
-    /**
-     * Enabled only to help debug Observe support issues in the server
-     */
-    private const val DISABLE_NO_RESPONSE_TIMEOUT = true
+    private const val NO_PEER_RESPONSE_TIMEOUT: Long = 10_000
 
     /**
      * Debugging feature to arbitrarily force a write delay to the remote peer to verify that
@@ -110,17 +108,27 @@ class DeviceDataFetcher(
   }
 
   @Synchronized
+  private fun onPeerResponseReceived() {
+    connectivity.postValue(ConnectivityState(nominal = true, raw_state = ConnectedState.CONNECTED))
+    forceScheduleNoResponseTimeout()
+  }
+
+  @Synchronized
   private fun forceScheduleNoResponseTimeout() {
-    if (!DISABLE_NO_RESPONSE_TIMEOUT) {
-      if (started) {
-        deviceListFuture?.cancel(false)
-        deviceListFuture = fetchingExecutor.schedule(
-          ::performDeviceListObserve,
-          NO_PEER_RESPONSE_TIMEOUT,
-          TimeUnit.MILLISECONDS
-        )
-      }
+    if (started) {
+      deviceListFuture?.cancel(false)
+      deviceListFuture = fetchingExecutor.schedule(
+        ::onPeerResponseTimeout,
+        NO_PEER_RESPONSE_TIMEOUT,
+        TimeUnit.MILLISECONDS
+      )
     }
+  }
+
+  @Synchronized
+  private fun onPeerResponseTimeout() {
+    connectivity.postValue(ConnectivityState(nominal = false, ConnectedState.CONNECTING))
+    performDeviceListObserve()
   }
 
   @Synchronized
@@ -133,8 +141,8 @@ class DeviceDataFetcher(
     deviceListCancel?.cancel()
     deviceListCancel = service.observeDevices { result ->
       result.fold(onSuccess = {
+        onPeerResponseReceived()
         if (started) {
-          forceScheduleNoResponseTimeout()
           emitDeviceList(it)
         }
       }, onFailure = {
@@ -279,8 +287,8 @@ class DeviceDataFetcher(
       deviceState.cancelTrigger?.cancel()
       deviceState.cancelTrigger = service.observeAttributes(device.address, attributeNames) { result ->
         result.fold(onSuccess = {
+          onPeerResponseReceived()
           if (started) {
-            forceScheduleNoResponseTimeout()
             refreshAttributeValues(device, it)
           }
         }, onFailure = {
