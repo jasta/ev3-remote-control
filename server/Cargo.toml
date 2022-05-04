@@ -8,7 +8,8 @@ edition = "2021"
 [dependencies]
 coap-server = { git = "https://github.com/jasta/coap-server-rs" }
 coap-lite = "0.9.0"
-tokio = "1.15.0"
+tokio = { version = "1.18.1", default-features = false, features = ["full"] }
+console-subscriber = { version = "0.1.5", optional = true }
 log = "0.4.14"
 env_logger = "0.9.0"
 querystring = "1.1.0"
@@ -30,3 +31,6 @@ async-trait = "0.1.53"
 
 [dev-dependencies]
 tempfile = "3.3.0"
+
+[features]
+async_debug = ["dep:console-subscriber", "tokio/tracing"]

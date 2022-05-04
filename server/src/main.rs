@@ -26,12 +26,19 @@ struct Opts {
 }
 
 fn main() {
-    let opts: Opts = Opts::parse();
+    logging_init();
 
-    env_logger::init();
+    let opts: Opts = Opts::parse();
 
     let bind_addr = determine_bind_address(opts);
     run_server_forever(bind_addr);
+}
+
+fn logging_init() {
+    env_logger::init();
+
+    #[cfg(feature = "async_debug")]
+    console_subscriber::init();
 }
 
 fn determine_bind_address(opts: Opts) -> (String, u16) {

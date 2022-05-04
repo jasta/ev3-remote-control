@@ -3,7 +3,7 @@ use crate::hal::WatchHandle;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use coap_server::app::{ObservableResource, Observers, ObserversHolder};
-use log::{error, info};
+use log::{debug, error, info, trace};
 use std::thread;
 
 #[derive(Default, Clone)]
