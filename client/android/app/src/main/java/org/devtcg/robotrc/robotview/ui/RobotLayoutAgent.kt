@@ -50,9 +50,11 @@ class RobotLayoutAgent(private val activity: FragmentActivity) {
 
   private fun maybeEmitOnDeviceAttributesUpdated(allAttributes: Map<String, DeviceAttributesSnapshot>) {
     for ((deviceAddress, attributes) in allAttributes) {
-      val cachedAttributes = attributesCache.put(deviceAddress, attributes)
-      if (cachedAttributes != attributes) {
-        layout.onDeviceAttributesUpdated(deviceAddress, attributes)
+      if (attributes.hasFetchedRemote()) {
+        val cachedAttributes = attributesCache.put(deviceAddress, attributes)
+        if (cachedAttributes != attributes) {
+          layout.onDeviceAttributesUpdated(deviceAddress, attributes)
+        }
       }
     }
     attributesCache.keys.retainAll { allAttributes.containsKey(it) }

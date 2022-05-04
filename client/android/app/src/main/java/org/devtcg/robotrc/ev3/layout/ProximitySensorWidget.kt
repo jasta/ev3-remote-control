@@ -24,6 +24,7 @@ class ProximitySensorWidget: DeviceWidget {
     val mode = snapshot.lookupLocalOrRemote("mode")?.asString()
     val percent = snapshot.lookupLocalOrRemote("value0")?.asNumber()
     if (mode == "IR-PROX" && percent != null) {
+      binding.proximitySlider.visibility = View.VISIBLE
       binding.proximitySlider.value = percent.toFloat()
       binding.proximityValue.text = percent.toInt().toString() + "%"
     } else {

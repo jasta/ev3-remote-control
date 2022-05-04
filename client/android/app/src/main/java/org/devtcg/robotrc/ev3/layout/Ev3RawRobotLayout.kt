@@ -87,7 +87,6 @@ class Ev3RawRobotLayout: RobotLayout {
     } else {
       currentWidget.onDeviceModelUpdated(model)
     }
-
   }
 
   override fun onCreateView(inflater: LayoutInflater, parent: ViewGroup?): View {

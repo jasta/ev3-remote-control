@@ -27,6 +27,11 @@ data class DeviceAttributesSnapshot(
    */
   fun elapsedSinceFetchedMs() = SystemClock.elapsedRealtime() - fetchedRealtimeMs
 
+  /**
+   * Has the data been fetched from the remote peer at least once?
+   */
+  fun hasFetchedRemote() = fetchedRealtimeMs > 0
+
   fun lookupLocalOrRemote(vararg attributeNames: String): AttributeValueLocal? {
     for (attributeName in attributeNames) {
       val value = optimisticValues[attributeName] ?: receivedValues[attributeName]
