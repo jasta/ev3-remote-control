@@ -51,17 +51,20 @@ class LegoMotorWidget: DeviceWidget {
     }
   }
 
-  private fun stepDutyCycle(step: Int) {
-    val bindingValue = binding.motorDutyCycleSlider.value
-    val clamped = binding.motorDutyCycleSlider.clampValue(bindingValue + step)
-    setRemoteDutyCycle(clamped.toInt())
-  }
-
   private fun setRemoteDutyCycle(newValue: Int) {
-    model.sendAttributeWrites(
-      mapOf(
-        "duty_cycle_sp" to AttributeValueLocal("int8", newValue.toString()),
-        "command" to AttributeValueLocal("string", "run-direct")))
+    if (newValue == 0) {
+      model.sendAttributeWrites(
+        mapOf(
+          "command" to AttributeValueLocal("string", "stop"),
+          "stop_action" to AttributeValueLocal("string", "coast")))
+    } else {
+      model.sendAttributeWrites(
+        mapOf(
+          "duty_cycle_sp" to AttributeValueLocal("int8", newValue.toString()),
+          "command" to AttributeValueLocal("string", "run-direct")
+        )
+      )
+    }
   }
 
   private fun motorReset() {
