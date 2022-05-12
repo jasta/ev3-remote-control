@@ -1,5 +1,6 @@
 package org.devtcg.robotrc.ev3.layout
 
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -37,7 +38,7 @@ class LegoMotorWidget: DeviceWidget {
     val duty_cycle = snapshot.lookupLocalOrRemote("duty_cycle_sp", "duty_cycle")?.asNumber()
 
     if (position != null) {
-      binding.motorPosition.text = (position.toInt() % 360 * 4).toString()
+      binding.motorPosition.text = (position.toInt() % (360 * 4)).toString()
     } else {
       binding.motorPosition.text = "???"
     }
